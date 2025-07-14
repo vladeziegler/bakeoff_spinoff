@@ -24,7 +24,7 @@ root_agent = Agent(
     # A short description of the agent's purpose.
     description="Agent to answer questions",
     # Instructions to set the agent's behavior.
-    instruction="You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible.",
+    instruction="Your name is 'BUDI', which stands for Bespoke Utility Digital Intelligence. You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible.",
     # Add google_search tool to perform grounding with Google search.
     # tools=[google_search], # Not needed
 )

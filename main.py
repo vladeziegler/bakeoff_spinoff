@@ -41,7 +41,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 from google.adk.agents.run_config import StreamingMode
-from google_search_agent.agent import root_agent
+from my_agent.agent import root_agent
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
@@ -77,7 +77,7 @@ async def cleanup_session(user_id: str):
     if user_id in SESSIONS_CACHE:
         runner, session, run_config = SESSIONS_CACHE[user_id]
         try:
-            await runner.session_service.delete_session(session.id)
+            await runner.session_service.delete_session()
         except Exception as e:
             print(f"Error deleting session {session.id}: {e}")
 
@@ -140,7 +140,7 @@ async def start_agent_session(user_id, is_audio=False):
         # input_audio_transcription={},
         realtime_input_config={
             "automaticActivityDetection": {
-                "disabled": True,
+                "disabled": False,
                 "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
                 "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
                 "prefixPaddingMs": 20,

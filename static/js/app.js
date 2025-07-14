@@ -1,18 +1,18 @@
 /**
-* Copyright 2025 Google LLC
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 /**
  * app.js: JS code for the adk-streaming sample app.
@@ -126,11 +126,23 @@ function connectWebsocket() {
 
   // Handle incoming messages
   websocket.onmessage = function (event) {
-    console.log("[AGENT TO CLIENT] Received message:", event.data);
-    const message_from_server = JSON.parse(event.data);
-    console.log("[AGENT TO CLIENT] ", message_from_server);
+    console.log('📨 Raw websocket message bytes:', event.data?.length || 0);
+    
+    try {
+      const message_from_server = JSON.parse(event.data);
+      console.log('📋 Parsed message:', {
+        mime_type: message_from_server.mime_type,
+        hasData: !!message_from_server.data,
+        dataLength: message_from_server.data?.length,
+        turn_complete: message_from_server.turn_complete,
+        interrupted: message_from_server.interrupted
+      });
+      
+      console.log(
+        `[AGENT TO CLIENT] Received message: ${message_from_server.mime_type}, ${message_from_server.data ? message_from_server.data.length : 0} bytes` 
+      );
 
-    // Check if the turn is complete
+      // Check if the turn is complete
     // if turn complete, add new message
     if (
       message_from_server.turn_complete &&
@@ -153,11 +165,29 @@ function connectWebsocket() {
     }
 
     // If it's audio, play it
-    if (message_from_server.mime_type == "audio/pcm" && audioPlayerNode) {
+    if (message_from_server.mime_type == "audio/pcm") {
+      console.log('🎵 Processing audio message:', {
+        hasData: !!message_from_server.data,
+        dataLength: message_from_server.data?.length,
+        audioPlayerNode: !!audioPlayerNode,
+        audioContextState: audioPlayerContext?.state
+      });
+      
+      if (!audioPlayerNode) {
+        console.error('❌ AudioPlayerNode is null! Audio system failed to initialize.');
+        return;
+      }
+      
       setPlaybackIndicator(true);
-      const buffer = base64ToArray(message_from_server.data);
-      console.log(`Received ${buffer.byteLength} bytes of audio data.`);
-      audioPlayerNode.port.postMessage(buffer, [buffer]);
+      
+      try {
+        const buffer = base64ToArray(message_from_server.data);
+        console.log(`🔊 Decoded ${buffer.byteLength} bytes of audio data, sending to worklet`);
+        audioPlayerNode.port.postMessage(buffer, [buffer]);
+        console.log('✅ Audio data sent to worklet successfully');
+      } catch (error) {
+        console.error('❌ Error processing audio:', error);
+      }
     }
 
     // If it's a text, print it
@@ -180,6 +210,10 @@ function connectWebsocket() {
 
       // Scroll down to the bottom of the messagesDiv
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    } catch (error) {
+      console.error('❌ Error parsing websocket message:', error, 'Raw data bytes:', event.data?.length || 0);
     }
   };
 
@@ -264,7 +298,7 @@ console.log("app.js loaded");
 
 // Import the audio worklets
 import { startAudioPlayerWorklet } from "./audio-player.js";
-import { startAudioRecorderWorklet } from "./audio-recorder.js";
+import { startAudioRecorder, stopAudioRecorder } from "./audio-recorder.js";
 
 export function setMicIndicator(active) {
   micIndicator.classList.toggle("active", active);
@@ -274,58 +308,109 @@ export function setPlaybackIndicator(active) {
   playbackIndicator.classList.toggle("active", active);
 }
 
-
-
 async function startAudio() {
   try {
+    console.log('🎧 Starting audio systems...');
+    
     // Start audio output
+    console.log('🔄 Initializing audio player worklet...');
     const [playerNode, playerCtx] = await startAudioPlayerWorklet();
     audioPlayerNode = playerNode;
     audioPlayerContext = playerCtx;
+    
+    console.log('🔊 Audio player initialized:', {
+      audioPlayerNode: !!audioPlayerNode,
+      audioContextState: audioPlayerContext?.state,
+      sampleRate: audioPlayerContext?.sampleRate
+    });
 
     // Handle playback finished event
     audioPlayerNode.port.onmessage = (event) => {
+      console.log('📨 Message from audio worklet:', event.data);
       if (event.data.playbackFinished) {
         setPlaybackIndicator(false);
       }
     };
 
     // Start audio input
-    const [recorderNode, recorderCtx, stream] = await startAudioRecorderWorklet(
-      audioRecorderHandler
-    );
-    audioRecorderNode = recorderNode;
-    audioRecorderContext = recorderCtx;
-    micStream = stream;
+    console.log('🔄 Initializing audio recorder...');
+    try {
+      const recorderResult = await startAudioRecorder(audioRecorderHandler);
+      if (recorderResult) {
+        const [recorderNode, recorderCtx, stream] = recorderResult;
+        audioRecorderNode = recorderNode;
+        audioRecorderContext = recorderCtx;
+        micStream = stream;
+        console.log('✅ Audio recorder initialized successfully');
+      } else {
+        console.log('ℹ️ Audio recorder already running, skipping initialization');
+      }
+    } catch (error) {
+      console.error('❌ Failed to initialize audio recorder:', error);
+      if (error.name === 'NotAllowedError') {
+        console.error('❌ Microphone permission denied. Please allow microphone access and refresh.');
+      } else if (error.name === 'NotFoundError') {
+        console.error('❌ No microphone found on this device.');
+      } else if (error.name === 'SecurityError') {
+        console.error('❌ Security error - HTTPS may be required for microphone access.');
+      }
+    }
+    
+    console.log('✅ Audio systems started successfully');
   } catch (error) {
-    console.error("Failed to start audio:", error);
-    // Optionally, display an error message to the user
+    console.error("❌ Failed to start audio:", error);
+    console.error("❌ Error details:", error.stack);
+    
+    // Provide more specific error information
+    if (error.name === 'SecurityError') {
+      console.error("❌ Security error - user interaction may be required for audio");
+    } else if (error.name === 'NotFoundError') {
+      console.error("❌ Audio worklet files not found");
+    } else if (error.name === 'NotAllowedError') {
+      console.error("❌ Audio permission denied");
+    }
   }
 }
 
-
-
 // Handle the user gesture requirement for the Web Audio API
-document.body.addEventListener(
-  "click",
-  () => {
-    if (audioPlayerContext && audioPlayerContext.state === "suspended") {
-      audioPlayerContext.resume();
+document.body.addEventListener("click", async () => {
+  console.log('🖱️ User clicked, checking audio context states...');
+  
+  if (audioPlayerContext) {
+    console.log('🔊 Player context state:', audioPlayerContext.state);
+    if (audioPlayerContext.state === "suspended") {
+      try {
+        await audioPlayerContext.resume();
+        console.log('✅ Player context resumed successfully');
+      } catch (error) {
+        console.error('❌ Failed to resume player context:', error);
+      }
     }
-    // if (audioRecorderContext && audioRecorderContext.state === "suspended") {
-    //   audioRecorderContext.resume();
-    // }
-  },
-  { once: true } // Run this listener only once
-);
+  }
+  
+  if (audioRecorderContext) {
+    console.log('🎤 Recorder context state:', audioRecorderContext.state);
+    if (audioRecorderContext.state === "suspended") {
+      try {
+        await audioRecorderContext.resume();
+        console.log('✅ Recorder context resumed successfully');
+      } catch (error) {
+        console.error('❌ Failed to resume recorder context:', error);
+      }
+    }
+  }
+});
 
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
+  console.log('🎤 Audio recorder received PCM data:', pcmData.byteLength, 'bytes');
+  
   // Add the 16-bit PCM data to the buffer
   audioBuffer.push(new Uint8Array(pcmData));
 
   // Start timer if not already running
   if (!bufferTimer) {
+    console.log('🎤 Starting audio buffer timer (200ms intervals)');
     bufferTimer = setInterval(sendBufferedAudio, 200); // 0.2 seconds
   }
 }
@@ -333,14 +418,19 @@ function audioRecorderHandler(pcmData) {
 // Send buffered audio data every 0.2 seconds
 function sendBufferedAudio() {
   if (audioBuffer.length === 0 || !is_audio) {
+    console.log('🎤 Skipping audio send - no buffer data or audio disabled');
     return;
   }
+
+  console.log('🎤 Preparing to send', audioBuffer.length, 'audio chunks');
 
   // Calculate total length
   let totalLength = 0;
   for (const chunk of audioBuffer) {
     totalLength += chunk.length;
   }
+
+  console.log('🎤 Total audio data length:', totalLength, 'bytes');
 
   // Combine all chunks into a single buffer
   const combinedBuffer = new Uint8Array(totalLength);
@@ -355,7 +445,7 @@ function sendBufferedAudio() {
     mime_type: "audio/pcm",
     data: arrayBufferToBase64(combinedBuffer.buffer),
   });
-  console.log("[CLIENT TO AGENT] sent", combinedBuffer.byteLength, "bytes");
+  console.log("🎤 [CLIENT TO AGENT] Sent audio:", combinedBuffer.byteLength, "bytes");
 
   // Clear the buffer
   audioBuffer = [];
@@ -370,21 +460,31 @@ function float32ToInt16(inputData) {
     pcm16[i] = inputData[i] * 0x7fff;
   }
   // Return the underlying ArrayBuffer.
-  return new Uint8Array(pcm16.buffer);
 }
 
-// Stop audio recording and cleanup
-function stopAudioRecording() {
-  if (bufferTimer) {
-    clearInterval(bufferTimer);
-    bufferTimer = null;
+let isMuted = false;
+const muteButton = document.getElementById("mute-button");
+muteButton.addEventListener("click", async () => {
+  if (isMuted) {
+    // Unmute
+    console.log("Unmuted");
+    isMuted = false;
+    muteButton.textContent = "Mute";
+    const recorderResult = await startAudioRecorder(audioRecorderHandler);
+    if (recorderResult) {
+      const [recorderNode, recorderCtx, stream] = recorderResult;
+      audioRecorderNode = recorderNode;
+      audioRecorderContext = recorderCtx;
+      micStream = stream;
+    }
+  } else {
+    // Mute
+    console.log("Muted");
+    isMuted = true;
+    muteButton.textContent = "Unmute";
+    stopAudioRecorder();
   }
-  
-  // Send any remaining buffered audio
-  if (audioBuffer.length > 0) {
-    sendBufferedAudio();
-  }
-}
+});
 
 // Encode an array buffer with Base64
 function arrayBufferToBase64(buffer) {
