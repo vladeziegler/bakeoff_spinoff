@@ -29,6 +29,69 @@ const ws_url =
 let websocket = null;
 let is_audio = true;
 
+// Reconnection management
+class ReconnectionManager {
+  constructor() {
+    this.reconnectDelay = 1000; // Start at 1 second
+    this.maxReconnectDelay = 30000; // Cap at 30 seconds
+    this.reconnectAttempts = 0;
+    this.maxAttempts = 10;
+    this.reconnectTimer = null;
+    this.isReconnecting = false;
+    this.isConnected = false;
+  }
+
+  scheduleReconnect() {
+    if (this.isReconnecting || this.reconnectAttempts >= this.maxAttempts) {
+      if (this.reconnectAttempts >= this.maxAttempts) {
+        document.getElementById("messages").textContent = 
+          `Connection failed after ${this.maxAttempts} attempts. Please refresh the page.`;
+      }
+      return;
+    }
+
+    this.isReconnecting = true;
+    console.log(`Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxAttempts})`);
+    
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectAttempts++;
+      connectWebsocket();
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+      this.isReconnecting = false;
+    }, this.reconnectDelay);
+  }
+
+  onConnectionSuccess() {
+    // Reset on successful connection
+    this.reconnectDelay = 1000;
+    this.reconnectAttempts = 0;
+    this.isConnected = true;
+    this.isReconnecting = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  onConnectionLost() {
+    this.isConnected = false;
+    this.scheduleReconnect();
+  }
+
+  reset() {
+    this.reconnectDelay = 1000;
+    this.reconnectAttempts = 0;
+    this.isConnected = false;
+    this.isReconnecting = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+}
+
+const reconnectionManager = new ReconnectionManager();
+
 // Get DOM elements
 const messageForm = document.getElementById("messageForm");
 const messageInput = document.getElementById("message");
@@ -45,6 +108,9 @@ function connectWebsocket() {
     // Connection opened messages
     console.log("WebSocket connection opened.");
     document.getElementById("messages").textContent = "Connection opened";
+    
+    // Notify reconnection manager of success
+    reconnectionManager.onConnectionSuccess();
 
     // Enable the Send button
     document.getElementById("sendButton").disabled = false;
@@ -116,19 +182,21 @@ function connectWebsocket() {
   websocket.onclose = function (event) {
     console.log("WebSocket connection closed:", event);
     document.getElementById("sendButton").disabled = true;
-    document.getElementById("messages").textContent = "Connection closed";
-    setTimeout(function () {
-      console.log("Reconnecting...");
-      connectWebsocket();
-    }, 5000);
+    
+    if (reconnectionManager.isConnected) {
+      document.getElementById("messages").textContent = "Connection lost. Reconnecting...";
+      reconnectionManager.onConnectionLost();
+    }
   };
 
   websocket.onerror = function (error) {
     console.error("WebSocket error:", error);
-    setTimeout(function () {
-      console.log("Reconnecting...");
-      connectWebsocket();
-    }, 5000);
+    document.getElementById("sendButton").disabled = true;
+    
+    if (reconnectionManager.isConnected) {
+      document.getElementById("messages").textContent = "Connection error. Reconnecting...";
+      reconnectionManager.onConnectionLost();
+    }
   };
 }
 connectWebsocket();

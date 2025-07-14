@@ -18,6 +18,7 @@ import asyncio
 import base64
 import warnings
 import time
+from collections import OrderedDict
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -53,16 +54,56 @@ load_dotenv()
 APP_NAME = "ADK Streaming example"
 
 
-SESSIONS_CACHE = {}
+# Session management with limits and timeouts
+MAX_SESSIONS = 10  # Maximum concurrent sessions
+SESSION_TIMEOUT = 300  # 5 minutes in seconds
+SESSIONS_CACHE = OrderedDict()  # LRU cache
+SESSION_TIMEOUTS = {}  # user_id -> timeout_task
 
 
 async def restart_agent_turn(runner, session, live_request_queue, run_config):
     """Restarts the agent's turn to enable multi-turn conversations."""
+    # Pass the run_config to ensure the agent's behavior (like audio output) is consistent across turns.
     return runner.run_live(
         session=session,
         live_request_queue=live_request_queue,
         run_config=run_config,
     )
+
+
+async def cleanup_session(user_id: str):
+    """Clean up a cached session and its resources."""
+    if user_id in SESSIONS_CACHE:
+        runner, session, run_config = SESSIONS_CACHE[user_id]
+        try:
+            await runner.session_service.delete_session(session.id)
+        except Exception as e:
+            print(f"Error deleting session {session.id}: {e}")
+        
+        # Remove from cache
+        del SESSIONS_CACHE[user_id]
+        print(f"Session for user {user_id} cleaned up")
+    
+    # Cancel timeout if exists
+    if user_id in SESSION_TIMEOUTS:
+        SESSION_TIMEOUTS[user_id].cancel()
+        del SESSION_TIMEOUTS[user_id]
+
+
+async def session_timeout_handler(user_id: str):
+    """Handle session timeout by cleaning up the session."""
+    await asyncio.sleep(SESSION_TIMEOUT)
+    print(f"Session timeout for user {user_id}")
+    await cleanup_session(user_id)
+
+
+async def ensure_session_limit():
+    """Ensure we don't exceed the maximum number of sessions."""
+    while len(SESSIONS_CACHE) >= MAX_SESSIONS:
+        # Remove the oldest session (LRU)
+        oldest_user_id = next(iter(SESSIONS_CACHE))
+        print(f"Session limit reached, removing oldest session: {oldest_user_id}")
+        await cleanup_session(oldest_user_id)
 
 
 async def start_agent_session(user_id, is_audio=False):
@@ -110,10 +151,7 @@ async def start_agent_session(user_id, is_audio=False):
     )
     # run_config = RunConfig(response_modalities=[modality])
 
-    # Create a LiveRequestQueue for this session
-    live_request_queue = LiveRequestQueue()
-
-    return runner, session, live_request_queue, run_config
+    return runner, session, run_config
 
 
 async def agent_to_client_messaging(websocket, live_events):
@@ -223,18 +261,36 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
     if user_id_str in SESSIONS_CACHE:
         # If session exists, restart the agent turn to get a new stream of live events
         print(f"Reusing session for user {user_id_str}")
-        runner, session, live_request_queue, run_config = SESSIONS_CACHE[user_id_str]
+        runner, session, run_config = SESSIONS_CACHE[user_id_str]
+        
+        # Move to end (most recently used)
+        SESSIONS_CACHE.move_to_end(user_id_str)
+        
+        # Reset timeout
+        if user_id_str in SESSION_TIMEOUTS:
+            SESSION_TIMEOUTS[user_id_str].cancel()
+        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(session_timeout_handler(user_id_str))
+        
+        live_request_queue = LiveRequestQueue()
         live_events = await restart_agent_turn(
             runner, session, live_request_queue, run_config
         )
     else:
+        # Ensure we don't exceed session limit
+        await ensure_session_limit()
+        
         # If session does not exist, create a new one and cache it
         print(f"Creating new session for user {user_id_str}")
-        runner, session, live_request_queue, run_config = await start_agent_session(
+        runner, session, run_config = await start_agent_session(
             user_id_str, is_audio == "true"
         )
-        SESSIONS_CACHE[user_id_str] = (runner, session, live_request_queue, run_config)
+        SESSIONS_CACHE[user_id_str] = (runner, session, run_config)
+        
+        # Set timeout for this session
+        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(session_timeout_handler(user_id_str))
+        
         # Start the agent session for the first time
+        live_request_queue = LiveRequestQueue()
         live_events = runner.run_live(
             session=session,
             live_request_queue=live_request_queue,
@@ -260,9 +316,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
 
         # Check for exceptions in completed tasks
         for task in done:
-            if task.exception() is not None:
-                # This will raise the exception and trigger the finally block
-                task.result()
+            try:
+                if task.exception() is not None:
+                    # This will raise the exception and trigger the finally block
+                    task.result()
+            except WebSocketDisconnect:
+                # This is an expected exception when the client disconnects.
+                print(f"Client #{user_id} disconnected gracefully.")
+                # We can just break the loop and proceed to the finally block for cleanup.
+                break
 
     finally:
         # Cancel tasks
@@ -277,8 +339,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
                 agent_to_client_task, client_to_agent_task, return_exceptions=True
             )
 
-        # Close LiveRequestQueue
-        live_request_queue.close()
+        # Note: We don't close the session here since it's cached for reuse
+        # The session will be cleaned up by timeout or when the cache is full
+        pass
 
     # Disconnected
     print(f"Client #{user_id} disconnected")
