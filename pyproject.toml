@@ -1,0 +1,17 @@
+[project]
+name = "adk-streaming-test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "google-adk>=1.6.1",
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "google-genai",
+    "websockets",
+]
+
+[tool.setuptools]
+packages = ["google_search_agent"]

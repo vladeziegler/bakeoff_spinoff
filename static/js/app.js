@@ -1,0 +1,308 @@
+/**
+* Copyright 2025 Google LLC
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+
+/**
+ * app.js: JS code for the adk-streaming sample app.
+ */
+
+/**
+ * WebSocket handling
+ */
+
+// Connect the server with a WebSocket connection
+const sessionId = Math.random().toString().substring(10);
+const ws_url =
+  "ws://" + window.location.host + "/ws/" + sessionId;
+let websocket = null;
+let is_audio = true;
+
+// Get DOM elements
+const messageForm = document.getElementById("messageForm");
+const messageInput = document.getElementById("message");
+const messagesDiv = document.getElementById("messages");
+let currentMessageId = null;
+
+// WebSocket handlers
+function connectWebsocket() {
+  // Connect websocket
+  websocket = new WebSocket(ws_url + "?is_audio=" + is_audio);
+
+  // Handle connection open
+  websocket.onopen = function () {
+    // Connection opened messages
+    console.log("WebSocket connection opened.");
+    document.getElementById("messages").textContent = "Connection opened";
+
+    // Enable the Send button
+    document.getElementById("sendButton").disabled = false;
+    addSubmitHandler();
+
+    // Start audio session if enabled
+    if (is_audio) {
+      startAudio();
+    }
+  };
+
+  // Handle incoming messages
+  websocket.onmessage = function (event) {
+    console.log("[AGENT TO CLIENT] Received message:", event.data);
+    const message_from_server = JSON.parse(event.data);
+    console.log("[AGENT TO CLIENT] ", message_from_server);
+
+    // Check if the turn is complete
+    // if turn complete, add new message
+    if (
+      message_from_server.turn_complete &&
+      message_from_server.turn_complete == true
+    ) {
+      currentMessageId = null;
+      return;
+    }
+
+    // Check for interrupt message
+    if (
+      message_from_server.interrupted &&
+      message_from_server.interrupted === true
+    ) {
+      // Stop audio playback if it's playing
+      if (audioPlayerNode) {
+        audioPlayerNode.port.postMessage({ command: "endOfAudio" });
+      }
+      return;
+    }
+
+    // If it's audio, play it
+    if (message_from_server.mime_type == "audio/pcm" && audioPlayerNode) {
+      const buffer = base64ToArray(message_from_server.data);
+      console.log(`Received ${buffer.byteLength} bytes of audio data.`);
+      audioPlayerNode.port.postMessage(buffer, [buffer]);
+    }
+
+    // If it's a text, print it
+    if (message_from_server.mime_type == "text/plain") {
+      console.log(`Received text: ${message_from_server.data}`);
+      // add a new message for a new turn
+      if (currentMessageId == null) {
+        currentMessageId = Math.random().toString(36).substring(7);
+        const message = document.createElement("p");
+        message.id = currentMessageId;
+        // Append the message element to the messagesDiv
+        messagesDiv.appendChild(message);
+      }
+
+      // Add message text to the existing message element
+      const message = document.getElementById(currentMessageId);
+      message.textContent += message_from_server.data;
+
+      // Scroll down to the bottom of the messagesDiv
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+  };
+
+  // Handle connection close
+  websocket.onclose = function (event) {
+    console.log("WebSocket connection closed:", event);
+    document.getElementById("sendButton").disabled = true;
+    document.getElementById("messages").textContent = "Connection closed";
+    setTimeout(function () {
+      console.log("Reconnecting...");
+      connectWebsocket();
+    }, 5000);
+  };
+
+  websocket.onerror = function (error) {
+    console.error("WebSocket error:", error);
+    setTimeout(function () {
+      console.log("Reconnecting...");
+      connectWebsocket();
+    }, 5000);
+  };
+}
+connectWebsocket();
+
+// Add submit handler to the form
+function addSubmitHandler() {
+  messageForm.onsubmit = function (e) {
+    e.preventDefault();
+    const message = messageInput.value;
+    if (message) {
+      const p = document.createElement("p");
+      p.textContent = "> " + message;
+      messagesDiv.appendChild(p);
+      messageInput.value = "";
+      sendMessage({
+        mime_type: "text/plain",
+        data: message,
+      });
+      console.log("[CLIENT TO AGENT] Sending message:", message);
+    }
+    return false;
+  };
+}
+
+// Send a message to the server as a JSON string
+function sendMessage(message) {
+  if (websocket && websocket.readyState == WebSocket.OPEN) {
+    console.log("[CLIENT TO AGENT] Sending message:", message);
+    const messageJson = JSON.stringify(message);
+    websocket.send(messageJson);
+  }
+}
+
+// Decode Base64 data to Array
+function base64ToArray(base64) {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Audio handling
+ */
+
+let audioPlayerNode;
+let audioPlayerContext;
+let audioRecorderNode;
+let audioRecorderContext;
+let micStream;
+
+// Audio buffering for 0.2s intervals
+let audioBuffer = [];
+let bufferTimer = null;
+
+console.log("app.js loaded");
+
+// Import the audio worklets
+import { startAudioPlayerWorklet } from "./audio-player.js";
+import { startAudioRecorderWorklet } from "./audio-recorder.js";
+
+
+
+async function startAudio() {
+  try {
+    // Start audio output
+    const [playerNode, playerCtx] = await startAudioPlayerWorklet();
+    audioPlayerNode = playerNode;
+    audioPlayerContext = playerCtx;
+
+    // Start audio input
+    // const [recorderNode, recorderCtx, stream] = await startAudioRecorderWorklet(
+    //   audioRecorderHandler
+    // );
+    // audioRecorderNode = recorderNode;
+    // audioRecorderContext = recorderCtx;
+    // micStream = stream;
+  } catch (error) {
+    console.error("Failed to start audio:", error);
+    // Optionally, display an error message to the user
+  }
+}
+
+
+
+// Handle the user gesture requirement for the Web Audio API
+document.body.addEventListener(
+  "click",
+  () => {
+    if (audioPlayerContext && audioPlayerContext.state === "suspended") {
+      audioPlayerContext.resume();
+    }
+    // if (audioRecorderContext && audioRecorderContext.state === "suspended") {
+    //   audioRecorderContext.resume();
+    // }
+  },
+  { once: true } // Run this listener only once
+);
+
+// Audio recorder handler
+function audioRecorderHandler(pcmData) {
+  // Convert Float32Array to 16-bit PCM and add to buffer
+  audioBuffer.push(float32ToInt16(pcmData));
+
+  // Start timer if not already running
+  if (!bufferTimer) {
+    bufferTimer = setInterval(sendBufferedAudio, 200); // 0.2 seconds
+  }
+}
+
+// Send buffered audio data every 0.2 seconds
+function sendBufferedAudio() {
+  if (audioBuffer.length === 0 || !is_audio) {
+    return;
+  }
+
+  // Calculate total length
+  let totalLength = 0;
+  for (const chunk of audioBuffer) {
+    totalLength += chunk.length;
+  }
+
+  // Combine all chunks into a single buffer
+  const combinedBuffer = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of audioBuffer) {
+    combinedBuffer.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // Send the combined audio data
+  sendMessage({
+    mime_type: "audio/pcm",
+    data: arrayBufferToBase64(combinedBuffer.buffer),
+  });
+  console.log("[CLIENT TO AGENT] sent", combinedBuffer.byteLength, "bytes");
+
+  // Clear the buffer
+  audioBuffer = [];
+}
+
+// Convert Float32Array to 16-bit PCM (Uint8Array)
+function float32ToInt16(buffer) {
+  let l = buffer.length;
+  let buf = new Int16Array(l);
+  while (l--) {
+    buf[l] = Math.min(1, buffer[l]) * 0x7fff;
+  }
+  return new Uint8Array(buf.buffer);
+}
+
+// Stop audio recording and cleanup
+function stopAudioRecording() {
+  if (bufferTimer) {
+    clearInterval(bufferTimer);
+    bufferTimer = null;
+  }
+  
+  // Send any remaining buffered audio
+  if (audioBuffer.length > 0) {
+    sendBufferedAudio();
+  }
+}
+
+// Encode an array buffer with Base64
+function arrayBufferToBase64(buffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
