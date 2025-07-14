@@ -96,6 +96,8 @@ const reconnectionManager = new ReconnectionManager();
 const messageForm = document.getElementById("messageForm");
 const messageInput = document.getElementById("message");
 const messagesDiv = document.getElementById("messages");
+const micIndicator = document.getElementById("mic-indicator");
+const playbackIndicator = document.getElementById("playback-indicator");
 let currentMessageId = null;
 
 // WebSocket handlers
@@ -152,6 +154,7 @@ function connectWebsocket() {
 
     // If it's audio, play it
     if (message_from_server.mime_type == "audio/pcm" && audioPlayerNode) {
+      setPlaybackIndicator(true);
       const buffer = base64ToArray(message_from_server.data);
       console.log(`Received ${buffer.byteLength} bytes of audio data.`);
       audioPlayerNode.port.postMessage(buffer, [buffer]);
@@ -171,6 +174,8 @@ function connectWebsocket() {
 
       // Add message text to the existing message element
       const message = document.getElementById(currentMessageId);
+      message.innerText += message_from_server.data;
+      console.log(`Appended text to message ${currentMessageId}: "${message_from_server.data}"`);
       message.textContent += message_from_server.data;
 
       // Scroll down to the bottom of the messagesDiv
@@ -261,6 +266,14 @@ console.log("app.js loaded");
 import { startAudioPlayerWorklet } from "./audio-player.js";
 import { startAudioRecorderWorklet } from "./audio-recorder.js";
 
+export function setMicIndicator(active) {
+  micIndicator.classList.toggle("active", active);
+}
+
+export function setPlaybackIndicator(active) {
+  playbackIndicator.classList.toggle("active", active);
+}
+
 
 
 async function startAudio() {
@@ -269,6 +282,13 @@ async function startAudio() {
     const [playerNode, playerCtx] = await startAudioPlayerWorklet();
     audioPlayerNode = playerNode;
     audioPlayerContext = playerCtx;
+
+    // Handle playback finished event
+    audioPlayerNode.port.onmessage = (event) => {
+      if (event.data.playbackFinished) {
+        setPlaybackIndicator(false);
+      }
+    };
 
     // Start audio input
     const [recorderNode, recorderCtx, stream] = await startAudioRecorderWorklet(

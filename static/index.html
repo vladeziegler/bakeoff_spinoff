@@ -3,10 +3,34 @@
   <head>
     <title>ADK Streaming Test (Audio)</title>
     <script src="/static/js/app.js?t=__TIMESTAMP__" type="module"></script>
+    <style>
+      #mic-indicator,
+      #playback-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-left: 10px;
+        background-color: #ccc; /* Default inactive color */
+        transition: background-color 0.3s;
+      }
+
+      #mic-indicator.active {
+        background-color: red;
+      }
+
+      #playback-indicator.active {
+        background-color: green;
+      }
+    </style>
   </head>
 
   <body>
-    <h1>ADK Streaming Test</h1>
+    <h1>
+      ADK Streaming Test
+      <div id="mic-indicator" class="indicator"></div>
+      <div id="playback-indicator" class="indicator"></div>
+    </h1>
     <div
       id="messages"
       style="height: 300px; overflow-y: auto; border: 1px solid black"></div>

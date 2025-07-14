@@ -13,6 +13,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this.buffer = new Float32Array(this.bufferSize);
     this.writeIndex = 0;
     this.readIndex = 0;
+    this.notifiedFinished = true;
 
     // Handle incoming messages from main thread
     this.port.onmessage = (event) => {
@@ -37,6 +38,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
   // Push incoming Int16 data into our ring buffer.
   _enqueue(int16Samples) {
+    this.notifiedFinished = false;
     for (let i = 0; i < int16Samples.length; i++) {
       // Convert 16-bit integer to float in [-1, 1]
       const floatVal = int16Samples[i] / 32768;
@@ -70,6 +72,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       } else {
         // Fill the rest of the buffer with silence if we've run out of data.
         channel.fill(0, i);
+        if (!this.notifiedFinished) {
+          this.port.postMessage({ playbackFinished: true });
+          this.notifiedFinished = true;
+        }
         break;
       }
     }

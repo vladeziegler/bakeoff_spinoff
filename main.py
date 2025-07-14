@@ -39,6 +39,7 @@ from google.adk.agents.run_config import RunConfig
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
+from starlette.websockets import WebSocketDisconnect
 from google.adk.agents.run_config import StreamingMode
 from google_search_agent.agent import root_agent
 
@@ -79,11 +80,11 @@ async def cleanup_session(user_id: str):
             await runner.session_service.delete_session(session.id)
         except Exception as e:
             print(f"Error deleting session {session.id}: {e}")
-        
+
         # Remove from cache
         del SESSIONS_CACHE[user_id]
         print(f"Session for user {user_id} cleaned up")
-    
+
     # Cancel timeout if exists
     if user_id in SESSION_TIMEOUTS:
         SESSION_TIMEOUTS[user_id].cancel()
@@ -154,59 +155,106 @@ async def start_agent_session(user_id, is_audio=False):
     return runner, session, run_config
 
 
-async def agent_to_client_messaging(websocket, live_events):
+async def agent_to_client_messaging(
+    websocket, live_events, shutdown_signal: asyncio.Event
+):
     """Agent to client communication"""
-    while True:
-        async for event in live_events:
+    try:
+        get_next_event_task = asyncio.create_task(anext(live_events))
+    except StopAsyncIteration:
+        print("[AGENT TO CLIENT] Live events finished at start.")
+        return
 
-            # If the turn complete or interrupted, send it
-            if event.turn_complete or event.interrupted:
+    shutdown_task = asyncio.create_task(shutdown_signal.wait())
+
+    while not shutdown_signal.is_set():
+        done, pending = await asyncio.wait(
+            [get_next_event_task, shutdown_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        if shutdown_task in done:
+            print("[AGENT TO CLIENT] Shutdown signal received, exiting.")
+            get_next_event_task.cancel()
+            break
+
+        try:
+            event = get_next_event_task.result()
+        except StopAsyncIteration:
+            print("[AGENT TO CLIENT] Live events finished.")
+            break
+
+        # Schedule the next event read before processing the current one
+        get_next_event_task = asyncio.create_task(anext(live_events))
+
+        # If the turn complete or interrupted, send it
+        if event.turn_complete or event.interrupted:
+            message = {
+                "turn_complete": event.turn_complete,
+                "interrupted": event.interrupted,
+            }
+            await websocket.send_text(json.dumps(message))
+            print(f"[AGENT TO CLIENT]: {message}")
+            continue
+
+        # Read the Content and its first Part
+        part: Part = event.content and event.content.parts and event.content.parts[0]
+        if not part:
+            continue
+
+        # If it's audio, send Base64 encoded audio data
+        is_audio = part.inline_data and part.inline_data.mime_type.startswith(
+            "audio/pcm"
+        )
+        if is_audio:
+            audio_data = part.inline_data and part.inline_data.data
+            if audio_data:
                 message = {
-                    "turn_complete": event.turn_complete,
-                    "interrupted": event.interrupted,
+                    "mime_type": "audio/pcm",
+                    "data": base64.b64encode(audio_data).decode("ascii"),
                 }
                 await websocket.send_text(json.dumps(message))
-                print(f"[AGENT TO CLIENT]: {message}")
+                print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
                 continue
 
-            # Read the Content and its first Part
-            part: Part = (
-                event.content and event.content.parts and event.content.parts[0]
-            )
-            if not part:
-                continue
-
-            # If it's audio, send Base64 encoded audio data
-            is_audio = part.inline_data and part.inline_data.mime_type.startswith(
-                "audio/pcm"
-            )
-            if is_audio:
-                audio_data = part.inline_data and part.inline_data.data
-                if audio_data:
-                    message = {
-                        "mime_type": "audio/pcm",
-                        "data": base64.b64encode(audio_data).decode("ascii"),
-                    }
-                    await websocket.send_text(json.dumps(message))
-                    print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
-                    continue
-
-                # If it's text and a parial text, send it
-                if part.text and event.partial:
-                    message = {"mime_type": "text/plain", "data": part.text}
-                    await websocket.send_text(json.dumps(message))
-                    print(f"[AGENT TO CLIENT]: text/plain: {message}")
+        # If it's text and a parial text, send it
+        if part.text and event.partial:
+            message = {"mime_type": "text/plain", "data": part.text}
+            await websocket.send_text(json.dumps(message))
+            print(f"[AGENT TO CLIENT]: text/plain: {message}")
 
 
-async def client_to_agent_messaging(websocket, live_request_queue):
+async def client_to_agent_messaging(
+    websocket,
+    live_request_queue,
+    shutdown_signal: asyncio.Event,
+):
     """Client to agent communication"""
-    while True:
-        # Decode JSON message
-        message_json = await websocket.receive_text()
-        print(f"[CLIENT TO AGENT] Received message: {message_json}")
+    receive_task = asyncio.create_task(websocket.receive_text())
+    shutdown_task = asyncio.create_task(shutdown_signal.wait())
+
+    while not shutdown_signal.is_set():
+        done, pending = await asyncio.wait(
+            [receive_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
+        )
+
+        if shutdown_task in done:
+            print("[CLIENT TO AGENT] Shutdown signal received, exiting.")
+            receive_task.cancel()
+            break
+
+        try:
+            message_json = receive_task.result()
+        except WebSocketDisconnect:
+            print("[CLIENT TO AGENT] WebSocket disconnected.")
+            break
+
+        # Schedule the next receive before processing
+        receive_task = asyncio.create_task(websocket.receive_text())
         message = json.loads(message_json)
         mime_type = message["mime_type"]
         data = message["data"]
+        print(f"[CLIENT TO AGENT] Received message: {mime_type}")
 
         # Send the message to the agent
         if mime_type == "text/plain":
@@ -215,9 +263,8 @@ async def client_to_agent_messaging(websocket, live_request_queue):
             live_request_queue.send_content(content=content)
             print(f"[CLIENT TO AGENT]: {data}")
         elif mime_type == "audio/pcm":
-            # Send an audio data
+            print(f"[CLIENT TO AGENT]: {mime_type}: {len(data)} bytes.")
             decoded_data = base64.b64decode(data)
-            print(f"[CLIENT TO AGENT]: audio/pcm: {len(decoded_data)} bytes.")
             live_request_queue.send_realtime(
                 Blob(data=decoded_data, mime_type=mime_type)
             )
@@ -230,6 +277,23 @@ async def client_to_agent_messaging(websocket, live_request_queue):
 #
 
 app = FastAPI()
+
+# Global event to signal shutdown
+shutdown_signal = asyncio.Event()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Gracefully clean up all active sessions on shutdown."""
+    print("Application shutting down...")
+    shutdown_signal.set()
+    user_ids = list(SESSIONS_CACHE.keys())
+    cleanup_tasks = [cleanup_session(user_id) for user_id in user_ids]
+    if cleanup_tasks:
+        # Add a timeout to session cleanup to prevent hanging
+        await asyncio.wait_for(asyncio.gather(*cleanup_tasks), timeout=10)
+    print("All active sessions cleaned up. Goodbye!")
+
 
 STATIC_DIR = Path("static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -262,15 +326,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
         # If session exists, restart the agent turn to get a new stream of live events
         print(f"Reusing session for user {user_id_str}")
         runner, session, run_config = SESSIONS_CACHE[user_id_str]
-        
+
         # Move to end (most recently used)
         SESSIONS_CACHE.move_to_end(user_id_str)
-        
+
         # Reset timeout
         if user_id_str in SESSION_TIMEOUTS:
             SESSION_TIMEOUTS[user_id_str].cancel()
-        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(session_timeout_handler(user_id_str))
-        
+        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(
+            session_timeout_handler(user_id_str)
+        )
+
         live_request_queue = LiveRequestQueue()
         live_events = await restart_agent_turn(
             runner, session, live_request_queue, run_config
@@ -278,17 +344,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
     else:
         # Ensure we don't exceed session limit
         await ensure_session_limit()
-        
+
         # If session does not exist, create a new one and cache it
         print(f"Creating new session for user {user_id_str}")
         runner, session, run_config = await start_agent_session(
             user_id_str, is_audio == "true"
         )
         SESSIONS_CACHE[user_id_str] = (runner, session, run_config)
-        
+
         # Set timeout for this session
-        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(session_timeout_handler(user_id_str))
-        
+        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(
+            session_timeout_handler(user_id_str)
+        )
+
         # Start the agent session for the first time
         live_request_queue = LiveRequestQueue()
         live_events = runner.run_live(
@@ -302,10 +370,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
     try:
         # Start tasks
         agent_to_client_task = asyncio.create_task(
-            agent_to_client_messaging(websocket, live_events)
+            agent_to_client_messaging(websocket, live_events, shutdown_signal)
         )
         client_to_agent_task = asyncio.create_task(
-            client_to_agent_messaging(websocket, live_request_queue)
+            client_to_agent_messaging(websocket, live_request_queue, shutdown_signal)
         )
 
         # Wait until the websocket is disconnected or an error occurs
