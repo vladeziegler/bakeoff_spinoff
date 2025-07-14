@@ -19,6 +19,40 @@
  */
 
 /**
+ * Logging system
+ */
+const LogLevel = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3
+};
+
+let currentLogLevel = LogLevel.WARN; // Default to WARN
+
+export const logger = {
+  debug: (...args) => { if (currentLogLevel <= LogLevel.DEBUG) console.log('[DEBUG]', ...args); },
+  info: (...args) => { if (currentLogLevel <= LogLevel.INFO) console.info('[INFO]', ...args); },
+  warn: (...args) => { if (currentLogLevel <= LogLevel.WARN) console.warn('[WARN]', ...args); },
+  error: (...args) => { if (currentLogLevel <= LogLevel.ERROR) console.error('[ERROR]', ...args); }
+};
+
+// Global function to change log level from browser console
+window.setLogLevel = function(level) {
+  const levelName = typeof level === 'string' ? level.toUpperCase() : level;
+  if (LogLevel.hasOwnProperty(levelName)) {
+    currentLogLevel = LogLevel[levelName];
+    logger.info(`Log level set to ${levelName}`);
+  } else if (typeof level === 'number' && level >= 0 && level <= 3) {
+    currentLogLevel = level;
+    const levelNames = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+    logger.info(`Log level set to ${levelNames[level]}`);
+  } else {
+    console.error('Invalid log level. Use: setLogLevel("DEBUG"), setLogLevel("INFO"), setLogLevel("WARN"), or setLogLevel("ERROR")');
+  }
+};
+
+/**
  * WebSocket handling
  */
 
@@ -51,7 +85,7 @@ class ReconnectionManager {
     }
 
     this.isReconnecting = true;
-    console.log(`Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxAttempts})`);
+    logger.debug(`Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxAttempts})`);
     
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++;
@@ -108,7 +142,7 @@ function connectWebsocket() {
   // Handle connection open
   websocket.onopen = function () {
     // Connection opened messages
-    console.log("WebSocket connection opened.");
+    logger.info("WebSocket connection opened.");
     document.getElementById("messages").textContent = "Connection opened";
     
     // Notify reconnection manager of success
@@ -126,11 +160,11 @@ function connectWebsocket() {
 
   // Handle incoming messages
   websocket.onmessage = function (event) {
-    console.log('📨 Raw websocket message bytes:', event.data?.length || 0);
+    logger.debug('📨 Raw websocket message bytes:', event.data?.length || 0);
     
     try {
       const message_from_server = JSON.parse(event.data);
-      console.log('📋 Parsed message:', {
+      logger.debug('📋 Parsed message:', {
         mime_type: message_from_server.mime_type,
         hasData: !!message_from_server.data,
         dataLength: message_from_server.data?.length,
@@ -138,7 +172,7 @@ function connectWebsocket() {
         interrupted: message_from_server.interrupted
       });
       
-      console.log(
+      logger.debug(
         `[AGENT TO CLIENT] Received message: ${message_from_server.mime_type}, ${message_from_server.data ? message_from_server.data.length : 0} bytes` 
       );
 
@@ -166,7 +200,7 @@ function connectWebsocket() {
 
     // If it's audio, play it
     if (message_from_server.mime_type == "audio/pcm") {
-      console.log('🎵 Processing audio message:', {
+      logger.debug('🎵 Processing audio message:', {
         hasData: !!message_from_server.data,
         dataLength: message_from_server.data?.length,
         audioPlayerNode: !!audioPlayerNode,
@@ -174,7 +208,7 @@ function connectWebsocket() {
       });
       
       if (!audioPlayerNode) {
-        console.error('❌ AudioPlayerNode is null! Audio system failed to initialize.');
+        logger.error('❌ AudioPlayerNode is null! Audio system failed to initialize.');
         return;
       }
       
@@ -182,17 +216,17 @@ function connectWebsocket() {
       
       try {
         const buffer = base64ToArray(message_from_server.data);
-        console.log(`🔊 Decoded ${buffer.byteLength} bytes of audio data, sending to worklet`);
+        logger.debug(`🔊 Decoded ${buffer.byteLength} bytes of audio data, sending to worklet`);
         audioPlayerNode.port.postMessage(buffer, [buffer]);
-        console.log('✅ Audio data sent to worklet successfully');
+        logger.debug('✅ Audio data sent to worklet successfully');
       } catch (error) {
-        console.error('❌ Error processing audio:', error);
+        logger.error('❌ Error processing audio:', error);
       }
     }
 
     // If it's a text, print it
     if (message_from_server.mime_type == "text/plain") {
-      console.log(`Received text: ${message_from_server.data}`);
+      logger.debug(`Received text: ${message_from_server.data}`);
       // add a new message for a new turn
       if (currentMessageId == null) {
         currentMessageId = Math.random().toString(36).substring(7);
@@ -205,7 +239,7 @@ function connectWebsocket() {
       // Add message text to the existing message element
       const message = document.getElementById(currentMessageId);
       message.innerText += message_from_server.data;
-      console.log(`Appended text to message ${currentMessageId}: "${message_from_server.data}"`);
+      logger.debug(`Appended text to message ${currentMessageId}: "${message_from_server.data}"`);
       message.textContent += message_from_server.data;
 
       // Scroll down to the bottom of the messagesDiv
@@ -213,13 +247,13 @@ function connectWebsocket() {
     }
     
     } catch (error) {
-      console.error('❌ Error parsing websocket message:', error, 'Raw data bytes:', event.data?.length || 0);
+      logger.error('❌ Error parsing websocket message:', error, 'Raw data bytes:', event.data?.length || 0);
     }
   };
 
   // Handle connection close
   websocket.onclose = function (event) {
-    console.log("WebSocket connection closed:", event);
+    logger.info("WebSocket connection closed:", event);
     document.getElementById("sendButton").disabled = true;
     
     if (reconnectionManager.isConnected) {
@@ -229,7 +263,7 @@ function connectWebsocket() {
   };
 
   websocket.onerror = function (error) {
-    console.error("WebSocket error:", error);
+    logger.error("WebSocket error:", error);
     document.getElementById("sendButton").disabled = true;
     
     if (reconnectionManager.isConnected) {
@@ -254,7 +288,7 @@ function addSubmitHandler() {
         mime_type: "text/plain",
         data: message,
       });
-      console.log("[CLIENT TO AGENT] Sending message:", message);
+      logger.debug("[CLIENT TO AGENT] Sending message:", message);
     }
     return false;
   };
@@ -263,7 +297,7 @@ function addSubmitHandler() {
 // Send a message to the server as a JSON string
 function sendMessage(message) {
   if (websocket && websocket.readyState == WebSocket.OPEN) {
-    console.log("[CLIENT TO AGENT] Sending message:", message);
+    logger.debug("[CLIENT TO AGENT] Sending message:", message);
     const messageJson = JSON.stringify(message);
     websocket.send(messageJson);
   }
@@ -294,7 +328,7 @@ let micStream;
 let audioBuffer = [];
 let bufferTimer = null;
 
-console.log("app.js loaded");
+logger.info("app.js loaded");
 
 // Import the audio worklets
 import { startAudioPlayerWorklet } from "./audio-player.js";
@@ -310,15 +344,15 @@ export function setPlaybackIndicator(active) {
 
 async function startAudio() {
   try {
-    console.log('🎧 Starting audio systems...');
+    logger.info('🎧 Starting audio systems...');
     
     // Start audio output
-    console.log('🔄 Initializing audio player worklet...');
+    logger.debug('🔄 Initializing audio player worklet...');
     const [playerNode, playerCtx] = await startAudioPlayerWorklet();
     audioPlayerNode = playerNode;
     audioPlayerContext = playerCtx;
     
-    console.log('🔊 Audio player initialized:', {
+    logger.debug('🔊 Audio player initialized:', {
       audioPlayerNode: !!audioPlayerNode,
       audioContextState: audioPlayerContext?.state,
       sampleRate: audioPlayerContext?.sampleRate
@@ -326,14 +360,14 @@ async function startAudio() {
 
     // Handle playback finished event
     audioPlayerNode.port.onmessage = (event) => {
-      console.log('📨 Message from audio worklet:', event.data);
+      logger.debug('📨 Message from audio worklet:', event.data);
       if (event.data.playbackFinished) {
         setPlaybackIndicator(false);
       }
     };
 
     // Start audio input
-    console.log('🔄 Initializing audio recorder...');
+    logger.debug('🔄 Initializing audio recorder...');
     try {
       const recorderResult = await startAudioRecorder(audioRecorderHandler);
       if (recorderResult) {
@@ -341,61 +375,61 @@ async function startAudio() {
         audioRecorderNode = recorderNode;
         audioRecorderContext = recorderCtx;
         micStream = stream;
-        console.log('✅ Audio recorder initialized successfully');
+        logger.debug('✅ Audio recorder initialized successfully');
       } else {
-        console.log('ℹ️ Audio recorder already running, skipping initialization');
+        logger.debug('ℹ️ Audio recorder already running, skipping initialization');
       }
     } catch (error) {
-      console.error('❌ Failed to initialize audio recorder:', error);
+      logger.error('❌ Failed to initialize audio recorder:', error);
       if (error.name === 'NotAllowedError') {
-        console.error('❌ Microphone permission denied. Please allow microphone access and refresh.');
+        logger.error('❌ Microphone permission denied. Please allow microphone access and refresh.');
       } else if (error.name === 'NotFoundError') {
-        console.error('❌ No microphone found on this device.');
+        logger.error('❌ No microphone found on this device.');
       } else if (error.name === 'SecurityError') {
-        console.error('❌ Security error - HTTPS may be required for microphone access.');
+        logger.error('❌ Security error - HTTPS may be required for microphone access.');
       }
     }
     
-    console.log('✅ Audio systems started successfully');
+    logger.info('✅ Audio systems started successfully');
   } catch (error) {
-    console.error("❌ Failed to start audio:", error);
-    console.error("❌ Error details:", error.stack);
+    logger.error("❌ Failed to start audio:", error);
+    logger.error("❌ Error details:", error.stack);
     
     // Provide more specific error information
     if (error.name === 'SecurityError') {
-      console.error("❌ Security error - user interaction may be required for audio");
+      logger.error("❌ Security error - user interaction may be required for audio");
     } else if (error.name === 'NotFoundError') {
-      console.error("❌ Audio worklet files not found");
+      logger.error("❌ Audio worklet files not found");
     } else if (error.name === 'NotAllowedError') {
-      console.error("❌ Audio permission denied");
+      logger.error("❌ Audio permission denied");
     }
   }
 }
 
 // Handle the user gesture requirement for the Web Audio API
 document.body.addEventListener("click", async () => {
-  console.log('🖱️ User clicked, checking audio context states...');
+  logger.debug('🖱️ User clicked, checking audio context states...');
   
   if (audioPlayerContext) {
-    console.log('🔊 Player context state:', audioPlayerContext.state);
+    logger.debug('🔊 Player context state:', audioPlayerContext.state);
     if (audioPlayerContext.state === "suspended") {
       try {
         await audioPlayerContext.resume();
-        console.log('✅ Player context resumed successfully');
+        logger.debug('✅ Player context resumed successfully');
       } catch (error) {
-        console.error('❌ Failed to resume player context:', error);
+        logger.error('❌ Failed to resume player context:', error);
       }
     }
   }
   
   if (audioRecorderContext) {
-    console.log('🎤 Recorder context state:', audioRecorderContext.state);
+    logger.debug('🎤 Recorder context state:', audioRecorderContext.state);
     if (audioRecorderContext.state === "suspended") {
       try {
         await audioRecorderContext.resume();
-        console.log('✅ Recorder context resumed successfully');
+        logger.debug('✅ Recorder context resumed successfully');
       } catch (error) {
-        console.error('❌ Failed to resume recorder context:', error);
+        logger.error('❌ Failed to resume recorder context:', error);
       }
     }
   }
@@ -403,14 +437,14 @@ document.body.addEventListener("click", async () => {
 
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
-  console.log('🎤 Audio recorder received PCM data:', pcmData.byteLength, 'bytes');
+  logger.debug('🎤 Audio recorder received PCM data:', pcmData.byteLength, 'bytes');
   
   // Add the 16-bit PCM data to the buffer
   audioBuffer.push(new Uint8Array(pcmData));
 
   // Start timer if not already running
   if (!bufferTimer) {
-    console.log('🎤 Starting audio buffer timer (200ms intervals)');
+    logger.debug('🎤 Starting audio buffer timer (200ms intervals)');
     bufferTimer = setInterval(sendBufferedAudio, 200); // 0.2 seconds
   }
 }
@@ -418,11 +452,11 @@ function audioRecorderHandler(pcmData) {
 // Send buffered audio data every 0.2 seconds
 function sendBufferedAudio() {
   if (audioBuffer.length === 0 || !is_audio) {
-    console.log('🎤 Skipping audio send - no buffer data or audio disabled');
+    logger.debug('🎤 Skipping audio send - no buffer data or audio disabled');
     return;
   }
 
-  console.log('🎤 Preparing to send', audioBuffer.length, 'audio chunks');
+  logger.debug('🎤 Preparing to send', audioBuffer.length, 'audio chunks');
 
   // Calculate total length
   let totalLength = 0;
@@ -430,7 +464,7 @@ function sendBufferedAudio() {
     totalLength += chunk.length;
   }
 
-  console.log('🎤 Total audio data length:', totalLength, 'bytes');
+  logger.debug('🎤 Total audio data length:', totalLength, 'bytes');
 
   // Combine all chunks into a single buffer
   const combinedBuffer = new Uint8Array(totalLength);
@@ -445,7 +479,7 @@ function sendBufferedAudio() {
     mime_type: "audio/pcm",
     data: arrayBufferToBase64(combinedBuffer.buffer),
   });
-  console.log("🎤 [CLIENT TO AGENT] Sent audio:", combinedBuffer.byteLength, "bytes");
+  logger.debug("🎤 [CLIENT TO AGENT] Sent audio:", combinedBuffer.byteLength, "bytes");
 
   // Clear the buffer
   audioBuffer = [];
@@ -467,7 +501,7 @@ const muteButton = document.getElementById("mute-button");
 muteButton.addEventListener("click", async () => {
   if (isMuted) {
     // Unmute
-    console.log("Unmuted");
+    logger.info("Unmuted");
     isMuted = false;
     muteButton.textContent = "Mute";
     const recorderResult = await startAudioRecorder(audioRecorderHandler);
@@ -479,7 +513,7 @@ muteButton.addEventListener("click", async () => {
     }
   } else {
     // Mute
-    console.log("Muted");
+    logger.info("Muted");
     isMuted = true;
     muteButton.textContent = "Unmute";
     stopAudioRecorder();

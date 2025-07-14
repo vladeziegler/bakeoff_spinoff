@@ -18,6 +18,7 @@ import asyncio
 import base64
 import warnings
 import time
+import logging
 from collections import OrderedDict
 
 from pathlib import Path
@@ -44,6 +45,12 @@ from google.adk.agents.run_config import StreamingMode
 from my_agent.agent import root_agent
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+
+# Configure logging
+logging.basicConfig(
+    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 #
 # ADK Streaming
@@ -78,12 +85,13 @@ async def cleanup_session(user_id: str):
         runner, session, run_config = SESSIONS_CACHE[user_id]
         try:
             await runner.session_service.delete_session()
+            logger.debug(f"Session {session.id} deleted successfully")
         except Exception as e:
-            print(f"Error deleting session {session.id}: {e}")
+            logger.error(f"Error deleting session {session.id}: {e}")
 
         # Remove from cache
         del SESSIONS_CACHE[user_id]
-        print(f"Session for user {user_id} cleaned up")
+        logger.debug(f"Session for user {user_id} cleaned up")
 
     # Cancel timeout if exists
     if user_id in SESSION_TIMEOUTS:
@@ -94,7 +102,7 @@ async def cleanup_session(user_id: str):
 async def session_timeout_handler(user_id: str):
     """Handle session timeout by cleaning up the session."""
     await asyncio.sleep(SESSION_TIMEOUT)
-    print(f"Session timeout for user {user_id}")
+    logger.debug(f"Session timeout for user {user_id}")
     await cleanup_session(user_id)
 
 
@@ -103,7 +111,9 @@ async def ensure_session_limit():
     while len(SESSIONS_CACHE) >= MAX_SESSIONS:
         # Remove the oldest session (LRU)
         oldest_user_id = next(iter(SESSIONS_CACHE))
-        print(f"Session limit reached, removing oldest session: {oldest_user_id}")
+        logger.warning(
+            f"Session limit reached, removing oldest session: {oldest_user_id}"
+        )
         await cleanup_session(oldest_user_id)
 
 
@@ -141,7 +151,7 @@ async def start_agent_session(user_id, is_audio=False):
         realtime_input_config={
             "automaticActivityDetection": {
                 "disabled": False,
-                "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
+                "startOfSpeechSensitivity": "START_SENSITIVITY_LOW",
                 "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
                 "prefixPaddingMs": 20,
                 "silenceDurationMs": 100,
@@ -162,7 +172,7 @@ async def agent_to_client_messaging(
     try:
         get_next_event_task = asyncio.create_task(anext(live_events))
     except StopAsyncIteration:
-        print("[AGENT TO CLIENT] Live events finished at start.")
+        logger.debug("[AGENT TO CLIENT] Live events finished at start.")
         return
 
     shutdown_task = asyncio.create_task(shutdown_signal.wait())
@@ -174,14 +184,14 @@ async def agent_to_client_messaging(
         )
 
         if shutdown_task in done:
-            print("[AGENT TO CLIENT] Shutdown signal received, exiting.")
+            logger.debug("[AGENT TO CLIENT] Shutdown signal received, exiting.")
             get_next_event_task.cancel()
             break
 
         try:
             event = get_next_event_task.result()
         except StopAsyncIteration:
-            print("[AGENT TO CLIENT] Live events finished.")
+            logger.debug("[AGENT TO CLIENT] Live events finished.")
             break
 
         # Schedule the next event read before processing the current one
@@ -194,7 +204,7 @@ async def agent_to_client_messaging(
                 "interrupted": event.interrupted,
             }
             await websocket.send_text(json.dumps(message))
-            print(f"[AGENT TO CLIENT]: {message}")
+            logger.debug(f"[AGENT TO CLIENT]: {message}")
             continue
 
         # Read the Content and its first Part
@@ -214,14 +224,14 @@ async def agent_to_client_messaging(
                     "data": base64.b64encode(audio_data).decode("ascii"),
                 }
                 await websocket.send_text(json.dumps(message))
-                print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
+                logger.debug(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
                 continue
 
         # If it's text and a parial text, send it
         if part.text and event.partial:
             message = {"mime_type": "text/plain", "data": part.text}
             await websocket.send_text(json.dumps(message))
-            print(f"[AGENT TO CLIENT]: text/plain: {message}")
+            logger.debug(f"[AGENT TO CLIENT]: text/plain: {message}")
 
 
 async def client_to_agent_messaging(
@@ -239,14 +249,14 @@ async def client_to_agent_messaging(
         )
 
         if shutdown_task in done:
-            print("[CLIENT TO AGENT] Shutdown signal received, exiting.")
+            logger.debug("[CLIENT TO AGENT] Shutdown signal received, exiting.")
             receive_task.cancel()
             break
 
         try:
             message_json = receive_task.result()
         except WebSocketDisconnect:
-            print("[CLIENT TO AGENT] WebSocket disconnected.")
+            logger.debug("[CLIENT TO AGENT] WebSocket disconnected.")
             break
 
         # Schedule the next receive before processing
@@ -254,16 +264,16 @@ async def client_to_agent_messaging(
         message = json.loads(message_json)
         mime_type = message["mime_type"]
         data = message["data"]
-        print(f"[CLIENT TO AGENT] Received message: {mime_type}")
+        logger.debug(f"[CLIENT TO AGENT] Received message: {mime_type}")
 
         # Send the message to the agent
         if mime_type == "text/plain":
             # Send a text message
             content = Content(role="user", parts=[Part.from_text(text=data)])
             live_request_queue.send_content(content=content)
-            print(f"[CLIENT TO AGENT]: {data}")
+            logger.debug(f"[CLIENT TO AGENT]: {data}")
         elif mime_type == "audio/pcm":
-            print(f"[CLIENT TO AGENT]: {mime_type}: {len(data)} bytes.")
+            logger.debug(f"[CLIENT TO AGENT]: {mime_type}: {len(data)} bytes.")
             decoded_data = base64.b64decode(data)
             live_request_queue.send_realtime(
                 Blob(data=decoded_data, mime_type=mime_type)
@@ -285,14 +295,14 @@ shutdown_signal = asyncio.Event()
 @app.on_event("shutdown")
 async def shutdown_event():
     """Gracefully clean up all active sessions on shutdown."""
-    print("Application shutting down...")
+    logger.info("Application shutting down...")
     shutdown_signal.set()
     user_ids = list(SESSIONS_CACHE.keys())
     cleanup_tasks = [cleanup_session(user_id) for user_id in user_ids]
     if cleanup_tasks:
         # Add a timeout to session cleanup to prevent hanging
         await asyncio.wait_for(asyncio.gather(*cleanup_tasks), timeout=10)
-    print("All active sessions cleaned up. Goodbye!")
+    logger.info("All active sessions cleaned up. Goodbye!")
 
 
 STATIC_DIR = Path("static")
@@ -318,13 +328,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
 
     # Wait for client connection
     await websocket.accept()
-    print(f"Client #{user_id} connected, audio mode: {is_audio}")
+    logger.info(f"Client #{user_id} connected, audio mode: {is_audio}")
 
     # Start agent session
     user_id_str = str(user_id)
     if user_id_str in SESSIONS_CACHE:
         # If session exists, restart the agent turn to get a new stream of live events
-        print(f"Reusing session for user {user_id_str}")
+        logger.debug(f"Reusing session for user {user_id_str}")
         runner, session, run_config = SESSIONS_CACHE[user_id_str]
 
         # Move to end (most recently used)
@@ -346,7 +356,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
         await ensure_session_limit()
 
         # If session does not exist, create a new one and cache it
-        print(f"Creating new session for user {user_id_str}")
+        logger.debug(f"Creating new session for user {user_id_str}")
         runner, session, run_config = await start_agent_session(
             user_id_str, is_audio == "true"
         )
@@ -390,7 +400,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
                     task.result()
             except WebSocketDisconnect:
                 # This is an expected exception when the client disconnects.
-                print(f"Client #{user_id} disconnected gracefully.")
+                logger.debug(f"Client #{user_id} disconnected gracefully.")
                 # We can just break the loop and proceed to the finally block for cleanup.
                 break
 
@@ -412,4 +422,4 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
         pass
 
     # Disconnected
-    print(f"Client #{user_id} disconnected")
+    logger.info(f"Client #{user_id} disconnected")

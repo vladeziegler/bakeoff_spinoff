@@ -1,6 +1,6 @@
-import { setMicIndicator } from "./app.js";
+import { setMicIndicator, logger } from "./app.js";
 
-console.log("audio-recorder.js loaded");
+// console.log("audio-recorder.js loaded");
 
 /**
  * Audio Recorder Worklet
@@ -14,18 +14,18 @@ const VOLUME_THRESHOLD = 0.01; // Threshold for activating the indicator
 
 export async function startAudioRecorder(audioRecorderHandler) {
   if (audioRecorderContext && audioRecorderContext.state === "running") {
-    console.log("Audio recorder is already running.");
+    logger.debug("Audio recorder is already running.");
     return;
   }
   
   try {
     // Create an AudioContext
-    console.log('🎤 Creating AudioContext for recording...');
+    logger.debug('🎤 Creating AudioContext for recording...');
     audioRecorderContext = new AudioContext({ sampleRate: 16000 });
-    console.log("🎤 AudioContext sample rate:", audioRecorderContext.sampleRate);
+    logger.debug("🎤 AudioContext sample rate:", audioRecorderContext.sampleRate);
 
     // Create inline worklet code to bypass file loading issues
-    console.log('🎤 Creating inline PCM recorder worklet...');
+    logger.debug('🎤 Creating inline PCM recorder worklet...');
     const recorderWorkletCode = `
 console.log("[AudioWorklet] Inline recorder worklet code loaded");
 
@@ -56,42 +56,42 @@ console.log("[AudioWorklet] PCMProcessor registered successfully");
     const recorderBlob = new Blob([recorderWorkletCode], { type: 'application/javascript' });
     const recorderWorkletUrl = URL.createObjectURL(recorderBlob);
     
-    console.log('🔗 Inline recorder worklet blob URL:', recorderWorkletUrl);
+    logger.debug('🔗 Inline recorder worklet blob URL:', recorderWorkletUrl);
     
     try {
       await audioRecorderContext.audioWorklet.addModule(recorderWorkletUrl);
-      console.log('✅ Inline PCM recorder worklet loaded successfully');
+      logger.debug('✅ Inline PCM recorder worklet loaded successfully');
       
       // Clean up the blob URL
       URL.revokeObjectURL(recorderWorkletUrl);
     } catch (error) {
-      console.error('❌ Failed to load inline recorder worklet:', error);
+      logger.error('❌ Failed to load inline recorder worklet:', error);
       URL.revokeObjectURL(recorderWorkletUrl);
       throw error;
     }
 
     // Request access to the microphone
-    console.log('🎤 Requesting microphone access...');
+    logger.debug('🎤 Requesting microphone access...');
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1 },
     });
-    console.log('✅ Microphone access granted');
+    logger.debug('✅ Microphone access granted');
     
     const source = audioRecorderContext.createMediaStreamSource(micStream);
-    console.log('✅ Media stream source created');
+    logger.debug('✅ Media stream source created');
 
     // Create an AudioWorkletNode that uses the PCMProcessor
-    console.log('🎤 Creating AudioWorkletNode...');
+    logger.debug('🎤 Creating AudioWorkletNode...');
     const audioRecorderNode = new AudioWorkletNode(
       audioRecorderContext,
       "pcm-recorder-processor"
     );
-    console.log('✅ AudioWorkletNode created');
+    logger.debug('✅ AudioWorkletNode created');
 
     // Connect the microphone source to the worklet.
-    console.log('🎤 Connecting microphone to worklet...');
+    logger.debug('🎤 Connecting microphone to worklet...');
     source.connect(audioRecorderNode);
-    console.log('✅ Audio pipeline connected');
+    logger.debug('✅ Audio pipeline connected');
     
     audioRecorderNode.port.onmessage = (event) => {
       const audioData = event.data;
@@ -115,11 +115,11 @@ console.log("[AudioWorklet] PCMProcessor registered successfully");
       audioRecorderHandler(pcmData);
     };
     
-    console.log('✅ Audio recorder setup complete');
+    logger.debug('✅ Audio recorder setup complete');
     return [audioRecorderNode, audioRecorderContext, micStream];
     
   } catch (error) {
-    console.error('❌ Error in startAudioRecorder:', error);
+    logger.error('❌ Error in startAudioRecorder:', error);
     
     // Clean up on error
     if (micStream) {
@@ -140,7 +140,7 @@ console.log("[AudioWorklet] PCMProcessor registered successfully");
  */
 export function stopMicrophone(micStream) {
   micStream.getTracks().forEach((track) => track.stop());
-  console.log("stopMicrophone(): Microphone stopped.");
+  logger.debug("stopMicrophone(): Microphone stopped.");
   if (micIndicatorTimeout) {
     clearTimeout(micIndicatorTimeout);
   }
@@ -160,12 +160,12 @@ export function stopAudioRecorder() {
   if (micStream) {
     micStream.getTracks().forEach((track) => track.stop());
     micStream = null;
-    console.log("Microphone stream stopped.");
+    logger.debug("Microphone stream stopped.");
   }
   if (audioRecorderContext) {
     audioRecorderContext.close();
     audioRecorderContext = null;
-    console.log("AudioContext closed.");
+    logger.debug("AudioContext closed.");
   }
   if (micIndicatorTimeout) {
     clearTimeout(micIndicatorTimeout);

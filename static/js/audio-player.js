@@ -1,4 +1,6 @@
-console.log("audio-player.js loaded");
+import { logger } from "./app.js";
+
+// console.log("audio-player.js loaded");
 
 /**
  * Audio Player Worklet
@@ -6,19 +8,19 @@ console.log("audio-player.js loaded");
 
 export async function startAudioPlayerWorklet() {
     try {
-        console.log('🎧 Creating AudioContext...');
+        logger.debug('🎧 Creating AudioContext...');
         // 1. Create an AudioContext
         const audioContext = new AudioContext({
             sampleRate: 24000
         });
         
-        console.log('🎧 AudioContext created:', {
+        logger.debug('🎧 AudioContext created:', {
             state: audioContext.state,
             sampleRate: audioContext.sampleRate
         });
         
         // 2. Create worklet code inline to bypass file loading issues
-        console.log('🔄 Creating inline audio worklet...');
+        logger.debug('🔄 Creating inline audio worklet...');
         
         const workletCode = `
 console.log('[AudioWorklet] Inline worklet code loaded');
@@ -132,35 +134,35 @@ console.log('[AudioWorklet] PCMPlayerProcessor registered successfully');
         const blob = new Blob([workletCode], { type: 'application/javascript' });
         const workletUrl = URL.createObjectURL(blob);
         
-        console.log('🔗 Inline worklet blob URL:', workletUrl);
+        logger.debug('🔗 Inline worklet blob URL:', workletUrl);
         
         try {
             await audioContext.audioWorklet.addModule(workletUrl);
-            console.log('✅ Inline audio worklet loaded successfully');
+            logger.debug('✅ Inline audio worklet loaded successfully');
             
             // Clean up the blob URL
             URL.revokeObjectURL(workletUrl);
         } catch (error) {
-            console.error('❌ Failed to load inline worklet:', error);
+            logger.error('❌ Failed to load inline worklet:', error);
             URL.revokeObjectURL(workletUrl);
             throw error;
         }
         
         // 3. Create an AudioWorkletNode   
-        console.log('🔄 Creating AudioWorkletNode...');
+        logger.debug('🔄 Creating AudioWorkletNode...');
         const audioPlayerNode = new AudioWorkletNode(audioContext, 'pcm-player-processor');
-        console.log('✅ AudioWorkletNode created successfully');
+        logger.debug('✅ AudioWorkletNode created successfully');
 
         // 4. Connect to the destination
-        console.log('🔄 Connecting to audio destination...');
+        logger.debug('🔄 Connecting to audio destination...');
         audioPlayerNode.connect(audioContext.destination);
-        console.log('✅ Audio pipeline connected');
+        logger.debug('✅ Audio pipeline connected');
 
         // The audioPlayerNode.port is how we send messages (audio data) to the processor
         return [audioPlayerNode, audioContext];
     } catch (error) {
-        console.error('❌ Error in startAudioPlayerWorklet:', error);
-        console.error('❌ Error stack:', error.stack);
+        logger.error('❌ Error in startAudioPlayerWorklet:', error);
+        logger.error('❌ Error stack:', error.stack);
         throw error;
     }
 }
