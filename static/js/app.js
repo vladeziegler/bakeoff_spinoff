@@ -203,12 +203,12 @@ async function startAudio() {
     audioPlayerContext = playerCtx;
 
     // Start audio input
-    // const [recorderNode, recorderCtx, stream] = await startAudioRecorderWorklet(
-    //   audioRecorderHandler
-    // );
-    // audioRecorderNode = recorderNode;
-    // audioRecorderContext = recorderCtx;
-    // micStream = stream;
+    const [recorderNode, recorderCtx, stream] = await startAudioRecorderWorklet(
+      audioRecorderHandler
+    );
+    audioRecorderNode = recorderNode;
+    audioRecorderContext = recorderCtx;
+    micStream = stream;
   } catch (error) {
     console.error("Failed to start audio:", error);
     // Optionally, display an error message to the user
@@ -233,8 +233,8 @@ document.body.addEventListener(
 
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
-  // Convert Float32Array to 16-bit PCM and add to buffer
-  audioBuffer.push(float32ToInt16(pcmData));
+  // Add the 16-bit PCM data to the buffer
+  audioBuffer.push(new Uint8Array(pcmData));
 
   // Start timer if not already running
   if (!bufferTimer) {
@@ -274,13 +274,15 @@ function sendBufferedAudio() {
 }
 
 // Convert Float32Array to 16-bit PCM (Uint8Array)
-function float32ToInt16(buffer) {
-  let l = buffer.length;
-  let buf = new Int16Array(l);
-  while (l--) {
-    buf[l] = Math.min(1, buffer[l]) * 0x7fff;
+function float32ToInt16(inputData) {
+  // Create an Int16Array of the same length.
+  const pcm16 = new Int16Array(inputData.length);
+  for (let i = 0; i < inputData.length; i++) {
+    // Multiply by 0x7fff (32767) to scale the float value to 16-bit PCM range.
+    pcm16[i] = inputData[i] * 0x7fff;
   }
-  return new Uint8Array(buf.buffer);
+  // Return the underlying ArrayBuffer.
+  return new Uint8Array(pcm16.buffer);
 }
 
 // Stop audio recording and cleanup

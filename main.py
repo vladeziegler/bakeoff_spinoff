@@ -53,6 +53,9 @@ load_dotenv()
 APP_NAME = "ADK Streaming example"
 
 
+SESSIONS_CACHE = {}
+
+
 async def restart_agent_turn(runner, session, live_request_queue, run_config):
     """Restarts the agent's turn to enable multi-turn conversations."""
     return runner.run_live(
@@ -110,13 +113,7 @@ async def start_agent_session(user_id, is_audio=False):
     # Create a LiveRequestQueue for this session
     live_request_queue = LiveRequestQueue()
 
-    # Start agent session
-    live_events = runner.run_live(
-        session=session,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-    )
-    return live_events, live_request_queue
+    return runner, session, live_request_queue, run_config
 
 
 async def agent_to_client_messaging(websocket, live_events):
@@ -223,9 +220,26 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
 
     # Start agent session
     user_id_str = str(user_id)
-    live_events, live_request_queue = await start_agent_session(
-        user_id_str, is_audio == "true"
-    )
+    if user_id_str in SESSIONS_CACHE:
+        # If session exists, restart the agent turn to get a new stream of live events
+        print(f"Reusing session for user {user_id_str}")
+        runner, session, live_request_queue, run_config = SESSIONS_CACHE[user_id_str]
+        live_events = await restart_agent_turn(
+            runner, session, live_request_queue, run_config
+        )
+    else:
+        # If session does not exist, create a new one and cache it
+        print(f"Creating new session for user {user_id_str}")
+        runner, session, live_request_queue, run_config = await start_agent_session(
+            user_id_str, is_audio == "true"
+        )
+        SESSIONS_CACHE[user_id_str] = (runner, session, live_request_queue, run_config)
+        # Start the agent session for the first time
+        live_events = runner.run_live(
+            session=session,
+            live_request_queue=live_request_queue,
+            run_config=run_config,
+        )
 
     agent_to_client_task = None
     client_to_agent_task = None
