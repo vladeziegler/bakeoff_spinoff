@@ -146,12 +146,12 @@ async def start_agent_session(user_id, is_audio=False):
         proactivity={
             "proactive_audio": True
         },  # https://googleapis.github.io/python-genai/genai.html#genai.types.ProactivityConfigDict
-        # output_audio_transcription={},
-        # input_audio_transcription={},
+        # output_audio_transcription=True,
+        # input_audio_transcription=True,
         realtime_input_config={
             "automaticActivityDetection": {
                 "disabled": False,
-                "startOfSpeechSensitivity": "START_SENSITIVITY_LOW",
+                "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
                 "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
                 "prefixPaddingMs": 20,
                 "silenceDurationMs": 100,
@@ -212,6 +212,7 @@ async def agent_to_client_messaging(
         if not part:
             continue
 
+        print(part)
         # If it's audio, send Base64 encoded audio data
         is_audio = part.inline_data and part.inline_data.mime_type.startswith(
             "audio/pcm"

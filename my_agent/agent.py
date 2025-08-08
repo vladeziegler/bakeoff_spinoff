@@ -16,7 +16,7 @@ from google.adk.agents import Agent
 from google.adk.tools import google_search  # Import the tool
 import logging
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
