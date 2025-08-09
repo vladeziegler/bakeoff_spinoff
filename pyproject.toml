@@ -14,4 +14,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["google_search_agent"]
+packages = ["my_agent"]

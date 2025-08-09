@@ -24,49 +24,15 @@ export async function startAudioRecorder(audioRecorderHandler) {
     audioRecorderContext = new AudioContext({ sampleRate: 16000 });
     logger.debug("🎤 AudioContext sample rate:", audioRecorderContext.sampleRate);
 
-    // Create inline worklet code to bypass file loading issues
-    logger.debug('🎤 Creating inline PCM recorder worklet...');
-    const recorderWorkletCode = `
-console.log("[AudioWorklet] Inline recorder worklet code loaded");
+    // Load the worklet module
+    const recorderWorkletUrl = '/static/js/audio-recorder-worklet.js';
+    logger.debug('🎤 Loading recorder worklet from:', recorderWorkletUrl);
 
-class PCMProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    console.log("[AudioWorklet] PCMProcessor constructor called");
-  }
-
-  process(inputs, outputs, parameters) {
-    if (inputs.length > 0 && inputs[0].length > 0) {
-      // Use the first channel
-      const inputChannel = inputs[0][0];
-      // Copy the buffer to avoid issues with recycled memory
-      const inputCopy = new Float32Array(inputChannel);
-      // Post the PCM data to the main thread
-      this.port.postMessage(inputCopy);
-    }
-    return true;
-  }
-}
-
-registerProcessor("pcm-recorder-processor", PCMProcessor);
-console.log("[AudioWorklet] PCMProcessor registered successfully");
-    `;
-    
-    // Create a blob URL for the recorder worklet
-    const recorderBlob = new Blob([recorderWorkletCode], { type: 'application/javascript' });
-    const recorderWorkletUrl = URL.createObjectURL(recorderBlob);
-    
-    logger.debug('🔗 Inline recorder worklet blob URL:', recorderWorkletUrl);
-    
     try {
       await audioRecorderContext.audioWorklet.addModule(recorderWorkletUrl);
-      logger.debug('✅ Inline PCM recorder worklet loaded successfully');
-      
-      // Clean up the blob URL
-      URL.revokeObjectURL(recorderWorkletUrl);
+      logger.debug('✅ PCM recorder worklet loaded successfully');
     } catch (error) {
-      logger.error('❌ Failed to load inline recorder worklet:', error);
-      URL.revokeObjectURL(recorderWorkletUrl);
+      logger.error('❌ Failed to load recorder worklet:', error);
       throw error;
     }
 

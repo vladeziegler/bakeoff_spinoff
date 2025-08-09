@@ -238,7 +238,6 @@ function connectWebsocket() {
 
       // Add message text to the existing message element
       const message = document.getElementById(currentMessageId);
-      message.innerText += message_from_server.data;
       logger.debug(`Appended text to message ${currentMessageId}: "${message_from_server.data}"`);
       message.textContent += message_from_server.data;
 
@@ -348,7 +347,7 @@ async function startAudio() {
     
     // Start audio output
     logger.debug('🔄 Initializing audio player worklet...');
-    const [playerNode, playerCtx] = await startAudioPlayerWorklet();
+    const [playerNode, playerCtx, gainNode] = await startAudioPlayerWorklet();
     audioPlayerNode = playerNode;
     audioPlayerContext = playerCtx;
     
@@ -356,6 +355,14 @@ async function startAudio() {
       audioPlayerNode: !!audioPlayerNode,
       audioContextState: audioPlayerContext?.state,
       sampleRate: audioPlayerContext?.sampleRate
+    });
+
+    // Handle volume control
+    const volumeSlider = document.getElementById('volume-slider');
+    volumeSlider.addEventListener('input', (event) => {
+        const volume = event.target.value;
+        gainNode.gain.value = volume;
+        logger.debug(`Volume set to: ${volume}`);
     });
 
     // Handle playback finished event

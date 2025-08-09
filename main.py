@@ -20,6 +20,7 @@ import warnings
 import time
 import logging
 from collections import OrderedDict
+import uvicorn
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -424,3 +425,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
 
     # Disconnected
     logger.info(f"Client #{user_id} disconnected")
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8881, reload=True)
