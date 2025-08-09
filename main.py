@@ -25,6 +25,8 @@ import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from google.genai.types import (
     Part,
     Content,
@@ -70,14 +72,7 @@ SESSIONS_CACHE = OrderedDict()  # LRU cache
 SESSION_TIMEOUTS = {}  # user_id -> timeout_task
 
 
-async def restart_agent_turn(runner, session, live_request_queue, run_config):
-    """Restarts the agent's turn to enable multi-turn conversations."""
-    # Pass the run_config to ensure the agent's behavior (like audio output) is consistent across turns.
-    return runner.run_live(
-        session=session,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-    )
+
 
 
 async def cleanup_session(user_id: str):
@@ -85,7 +80,9 @@ async def cleanup_session(user_id: str):
     if user_id in SESSIONS_CACHE:
         runner, session, run_config = SESSIONS_CACHE[user_id]
         try:
-            await runner.session_service.delete_session()
+            await runner.session_service.delete_session(
+                app_name=APP_NAME, user_id=user_id, session_id=session.id
+            )
             logger.debug(f"Session {session.id} deleted successfully")
         except Exception as e:
             logger.error(f"Error deleting session {session.id}: {e}")
@@ -290,6 +287,17 @@ async def client_to_agent_messaging(
 
 app = FastAPI()
 
+# Configure CORS
+origins = ["*"]  # Allow all origins for development
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Global event to signal shutdown
 shutdown_signal = asyncio.Event()
 
@@ -325,57 +333,57 @@ async def root():
 
 
 @app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
+async def websocket_endpoint(websocket: WebSocket, user_id: str, is_audio: str):
     """Client websocket endpoint"""
 
     # Wait for client connection
     await websocket.accept()
     logger.info(f"Client #{user_id} connected, audio mode: {is_audio}")
 
-    # Start agent session
+    # Get the user ID and check for an existing session.
     user_id_str = str(user_id)
     if user_id_str in SESSIONS_CACHE:
-        # If session exists, restart the agent turn to get a new stream of live events
+        # If a session exists, retrieve it and reset its timeout.
         logger.debug(f"Reusing session for user {user_id_str}")
         runner, session, run_config = SESSIONS_CACHE[user_id_str]
-
-        # Move to end (most recently used)
-        SESSIONS_CACHE.move_to_end(user_id_str)
-
-        # Reset timeout
+        SESSIONS_CACHE.move_to_end(user_id_str)  # Mark as most recently used
         if user_id_str in SESSION_TIMEOUTS:
             SESSION_TIMEOUTS[user_id_str].cancel()
-        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(
-            session_timeout_handler(user_id_str)
-        )
-
-        live_request_queue = LiveRequestQueue()
-        live_events = await restart_agent_turn(
-            runner, session, live_request_queue, run_config
-        )
     else:
-        # Ensure we don't exceed session limit
-        await ensure_session_limit()
-
-        # If session does not exist, create a new one and cache it
+        # If no session exists, create a new one and cache it.
         logger.debug(f"Creating new session for user {user_id_str}")
+        await ensure_session_limit()
         runner, session, run_config = await start_agent_session(
             user_id_str, is_audio == "true"
         )
         SESSIONS_CACHE[user_id_str] = (runner, session, run_config)
 
-        # Set timeout for this session
-        SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(
-            session_timeout_handler(user_id_str)
-        )
+    # Set a timeout to clean up the session after a period of inactivity.
+    SESSION_TIMEOUTS[user_id_str] = asyncio.create_task(
+        session_timeout_handler(user_id_str)
+    )
 
-        # Start the agent session for the first time
-        live_request_queue = LiveRequestQueue()
-        live_events = runner.run_live(
-            session=session,
-            live_request_queue=live_request_queue,
-            run_config=run_config,
+    # For each new connection, create a new queue and start a new live run.
+    live_request_queue = LiveRequestQueue()
+    live_events = runner.run_live(
+        session=session,
+        live_request_queue=live_request_queue,
+        run_config=run_config,
+    )
+
+    # Send session info to the client
+    await websocket.send_text(
+        json.dumps(
+            {
+                "mime_type": "application/json",
+                "event": "session_info",
+                "data": {
+                    "user_id": user_id_str,
+                    "session_id": session.id,
+                },
+            }
         )
+    )
 
     agent_to_client_task = None
     client_to_agent_task = None
@@ -428,4 +436,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, is_audio: str):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8881, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8881,
+        reload=True,
+        reload_dirs=["./static", "./my_agent"]
+    )

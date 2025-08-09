@@ -12,3 +12,6 @@ install:
 
 run:
 	uv run uvicorn main:app --reload --port 8881 --host 0.0.0.0
+
+dev:
+	uv run python main.py

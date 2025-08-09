@@ -78,7 +78,7 @@ def get_weather(city: str, state: str) -> dict:
 q_and_a_agent = Agent(
     # A unique name for the agent.
     name="q_and_a",
-    model=config.general_model,
+    model=config.live_model,
     instruction="You can answer questions about various topics. If you don't know the answer, you can use the google_search tool to find information.",
     description="Agent to answer questions",
     # Add google_search tool to perform grounding with Google search.

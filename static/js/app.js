@@ -53,13 +53,58 @@ window.setLogLevel = function(level) {
 };
 
 /**
+ * User and session management
+ */
+
+// Gets a user ID from local storage, or creates a new one if it doesn't exist.
+function getOrCreateUserId() {
+    let userId = localStorage.getItem('userId');
+    if (!userId) {
+        userId = Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('userId', userId);
+        logger.info(`New user ID created: ${userId}`);
+    }
+    return userId;
+}
+
+// Resets the session by clearing the user ID and reloading the page.
+function resetSession() {
+    logger.info('Resetting session...');
+    localStorage.removeItem('userId');
+    window.websocket_connection_active = false; // Reset the singleton guard
+
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        // Set a one-time close handler to reload the page.
+        websocket.onclose = function () {
+            logger.debug("WebSocket closed, reloading page.");
+            location.reload();
+        };
+        // Close the connection. The handler above will trigger the reload.
+        websocket.close();
+    } else {
+        // If there's no open websocket, just reload.
+        location.reload();
+    }
+}
+
+// Add event listener to the reset button.
+document.addEventListener('DOMContentLoaded', () => {
+    const resetButton = document.getElementById('reset-session-button');
+    if (resetButton) {
+        resetButton.addEventListener('click', resetSession);
+    }
+});
+
+/**
  * WebSocket handling
  */
 
-// Connect the server with a WebSocket connection
-const sessionId = Math.random().toString().substring(10);
-const ws_url =
-  "ws://" + window.location.host + "/ws/" + sessionId;
+// Singleton guard to ensure only one WebSocket connection is active.
+window.websocket_connection_active = false;
+
+// Get the user ID and construct the WebSocket URL.
+const userId = getOrCreateUserId();
+const ws_url = "ws://" + window.location.host + "/ws/" + userId;
 let websocket = null;
 let is_audio = true;
 
@@ -136,6 +181,13 @@ let currentMessageId = null;
 
 // WebSocket handlers
 function connectWebsocket() {
+  // Singleton Guard: If a connection is already active, do nothing.
+  if (window.websocket_connection_active) {
+    logger.debug("WebSocket connection already active. Skipping connection.");
+    return;
+  }
+  window.websocket_connection_active = true;
+  logger.debug("WebSocket connection flag set to true.");
   // Connect websocket
   websocket = new WebSocket(ws_url + "?is_audio=" + is_audio);
 
@@ -244,6 +296,12 @@ function connectWebsocket() {
       // Scroll down to the bottom of the messagesDiv
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
+
+    // If it's a session info message, display it
+    if (message_from_server.event == "session_info") {
+        document.getElementById("user-id").textContent = message_from_server.data.user_id;
+        document.getElementById("session-id").textContent = message_from_server.data.session_id;
+    }
     
     } catch (error) {
       logger.error('❌ Error parsing websocket message:', error, 'Raw data bytes:', event.data?.length || 0);
@@ -253,6 +311,7 @@ function connectWebsocket() {
   // Handle connection close
   websocket.onclose = function (event) {
     logger.info("WebSocket connection closed:", event);
+    window.websocket_connection_active = false; // Reset the singleton guard
     document.getElementById("sendButton").disabled = true;
     
     if (reconnectionManager.isConnected) {
@@ -263,6 +322,7 @@ function connectWebsocket() {
 
   websocket.onerror = function (error) {
     logger.error("WebSocket error:", error);
+    window.websocket_connection_active = false; // Reset the singleton guard
     document.getElementById("sendButton").disabled = true;
     
     if (reconnectionManager.isConnected) {
