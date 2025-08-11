@@ -167,7 +167,7 @@ class AudioClient {
         }, backoffTime);
     }
 
-    // Initialize the audio context and recorder
+    // Initialize the audio context and recorder using AudioWorklet
     async initializeAudio() {
         try {
             // Request microphone access
@@ -175,53 +175,63 @@ class AudioClient {
 
             // Reuse existing audio context if available or create a new one
             if (!this.audioContext || this.audioContext.state === 'closed') {
-                console.log("Creating new audio context for recording");
+                console.log("Creating new audio context for recording with AudioWorklet");
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
                     sampleRate: 16000 // Match the sample rate expected by server
                 });
 
-                // Track this context for cleanup
-                window.existingAudioContexts = window.existingAudioContexts || [];
-                window.existingAudioContexts.push(this.audioContext);
+                // Track this context for cleanup with LRU management
+                this.trackAudioContext(this.audioContext);
+
+                // Load the AudioWorklet module with fallback
+                try {
+                    await this.audioContext.audioWorklet.addModule('/static/live/audio-processor.js');
+                } catch (workletError) {
+                    console.warn('AudioWorklet not supported, this would fallback to ScriptProcessor in production:', workletError);
+                    throw new Error('AudioWorklet initialization failed: ' + workletError.message);
+                }
             }
 
             // Create MediaStreamSource
             const source = this.audioContext.createMediaStreamSource(stream);
 
-            // Create ScriptProcessor for audio processing
-            const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+            // Create AudioWorkletNode
+            const workletNode = new AudioWorkletNode(this.audioContext, 'audio-processor-worklet');
 
-            processor.onaudioprocess = (e) => {
-                if (!this.isRecording) return;
+            // Handle messages from the worklet with error handling
+            workletNode.port.onmessage = (event) => {
+                try {
+                    const { type, data, error } = event.data;
+                    
+                    if (type === 'error') {
+                        console.error('AudioWorklet error:', error);
+                        this.onError(new Error('AudioWorklet: ' + error));
+                        return;
+                    }
+                    
+                    if (type === 'audio-data' && this.isConnected && this.isRecording) {
+                        // Convert Int16Array to Uint8Array for transmission
+                        const audioBuffer = new Uint8Array(data.buffer);
+                        const base64Audio = this._arrayBufferToBase64(audioBuffer);
 
-                // Get audio data
-                const inputData = e.inputBuffer.getChannelData(0);
-
-                // Convert float32 to int16
-                const int16Data = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    int16Data[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
-                }
-
-                // Send to server if connected
-                if (this.isConnected && this.isRecording) {
-                    const audioBuffer = new Uint8Array(int16Data.buffer);
-                    const base64Audio = this._arrayBufferToBase64(audioBuffer);
-
-                    this.ws.send(JSON.stringify({
-                        mime_type: 'audio/pcm',
-                        data: base64Audio
-                    }));
+                        this.ws.send(JSON.stringify({
+                            mime_type: 'audio/pcm',
+                            data: base64Audio
+                        }));
+                    }
+                } catch (error) {
+                    console.error('Error handling AudioWorklet message:', error);
+                    this.onError(error);
                 }
             };
 
             // Connect the audio nodes
-            source.connect(processor);
-            processor.connect(this.audioContext.destination);
+            source.connect(workletNode);
+            // Note: AudioWorkletNode doesn't need to be connected to destination for processing
 
             this.recorder = {
                 source: source,
-                processor: processor,
+                workletNode: workletNode,
                 stream: stream
             };
 
@@ -250,12 +260,23 @@ class AudioClient {
         }
 
         this.isRecording = true;
+        
+        // Start recording in the worklet
+        if (this.recorder.workletNode) {
+            this.recorder.workletNode.port.postMessage({ type: 'start-recording' });
+        }
+        
         return true;
     }
 
     // Stop recording audio
     stopRecording() {
         this.isRecording = false;
+        
+        // Stop recording in the worklet
+        if (this.recorder && this.recorder.workletNode) {
+            this.recorder.workletNode.port.postMessage({ type: 'stop-recording' });
+        }
     }
 
     // Decode and play received audio
@@ -405,16 +426,19 @@ class AudioClient {
             try {
                 this.recorder.stream.getTracks().forEach(track => track.stop());
                 this.recorder.source.disconnect();
-                this.recorder.processor.disconnect();
+                if (this.recorder.workletNode) {
+                    this.recorder.workletNode.disconnect();
+                }
                 this.recorder = null;
             } catch (e) {
                 console.error("Error cleaning up recorder:", e);
             }
         }
 
-        // Close audio context
+        // Close audio context and remove from tracking
         if (this.audioContext && this.audioContext.state !== 'closed') {
             try {
+                this.untrackAudioContext(this.audioContext);
                 this.audioContext.close().catch(e => console.error("Error closing audio context:", e));
             } catch (e) {
                 console.error("Error closing audio context:", e);
@@ -456,5 +480,76 @@ class AudioClient {
             bytes[i] = binaryString.charCodeAt(i);
         }
         return bytes.buffer;
+    }
+    
+    /**
+     * Initialize audio context tracking with LRU cleanup
+     */
+    initializeAudioContextTracking() {
+        // Initialize global tracking if not exists
+        if (!window.audioContextManager) {
+            window.audioContextManager = {
+                contexts: [],
+                maxContexts: 5,
+                
+                add(context) {
+                    // Remove context if already tracked
+                    this.remove(context);
+                    
+                    // Add to front of list
+                    this.contexts.unshift(context);
+                    
+                    // Cleanup old contexts if over limit
+                    while (this.contexts.length > this.maxContexts) {
+                        const oldContext = this.contexts.pop();
+                        try {
+                            if (oldContext && oldContext.state !== 'closed') {
+                                oldContext.close();
+                            }
+                        } catch (e) {
+                            console.error('Error closing old audio context:', e);
+                        }
+                    }
+                },
+                
+                remove(context) {
+                    const index = this.contexts.indexOf(context);
+                    if (index > -1) {
+                        this.contexts.splice(index, 1);
+                    }
+                },
+                
+                cleanup() {
+                    this.contexts.forEach(ctx => {
+                        try {
+                            if (ctx && ctx.state !== 'closed') {
+                                ctx.close();
+                            }
+                        } catch (e) {
+                            console.error('Error closing audio context during cleanup:', e);
+                        }
+                    });
+                    this.contexts = [];
+                }
+            };
+        }
+    }
+    
+    /**
+     * Track audio context with LRU management
+     */
+    trackAudioContext(context) {
+        if (window.audioContextManager) {
+            window.audioContextManager.add(context);
+        }
+    }
+    
+    /**
+     * Remove audio context from tracking
+     */
+    untrackAudioContext(context) {
+        if (window.audioContextManager) {
+            window.audioContextManager.remove(context);
+        }
     }
 }

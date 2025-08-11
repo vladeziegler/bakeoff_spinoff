@@ -101,7 +101,7 @@ root_agent = Agent(
     # A short description of the agent's purpose.
     description="Root agent that delegates to sub-agents when responding to user queries.",
     # Instructions to set the agent's behavior.
-    instruction="You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question",
+    instruction="You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question. Please try not to to be overy obseqious or ask too many follow-up questions.",
     # Add google_search tool to perform grounding with Google search.
     tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent)],
 )

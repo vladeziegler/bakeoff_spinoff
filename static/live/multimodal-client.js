@@ -104,6 +104,8 @@ class MultimodalClient extends AudioClient {
 
     // Start sending video frames to server
     startVideoStream(frameRate = 1) {
+        console.log('startVideoStream called with:', { frameRate, isVideoActive: this.isVideoActive, isConnected: this.isConnected });
+        
         if (!this.isVideoActive || !this.isConnected) {
             console.error('Video is not active or not connected to server');
             return false;
@@ -145,11 +147,14 @@ class MultimodalClient extends AudioClient {
                 const base64Data = dataURL.split(',')[1];
 
                 // Send to server with video mode metadata
-                this.ws.send(JSON.stringify({
+                const message = {
                     mime_type: 'image/jpeg',
                     data: base64Data,
                     mode: this.videoMode || 'webcam'
-                }));
+                };
+                
+                // Uncomment for debugging: console.log(`📸 Sending video frame: ${base64Data.length} bytes, mode: ${this.videoMode}`);
+                this.ws.send(JSON.stringify(message));
             } catch (error) {
                 console.error('Error capturing video frame:', error);
             }
