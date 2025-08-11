@@ -18,6 +18,7 @@ class AudioClient {
         // Callbacks
         this.onReady = () => { };
         this.onAudioReceived = () => { };
+        this.onAudioSent = () => { }; // New callback for when we send audio
         this.onTextReceived = () => { };
         this.onTurnComplete = () => { };
         this.onError = () => { };
@@ -214,10 +215,17 @@ class AudioClient {
                         const audioBuffer = new Uint8Array(data.buffer);
                         const base64Audio = this._arrayBufferToBase64(audioBuffer);
 
+                        // Check if there's significant audio activity
+                        const int16Array = new Int16Array(data.buffer);
+                        const hasSignificantAudio = this._detectAudioActivity(int16Array);
+                        
                         this.ws.send(JSON.stringify({
                             mime_type: 'audio/pcm',
                             data: base64Audio
                         }));
+                        
+                        // Trigger callback with audio activity status
+                        this.onAudioSent(hasSignificantAudio);
                     }
                 } catch (error) {
                     console.error('Error handling AudioWorklet message:', error);
@@ -551,5 +559,23 @@ class AudioClient {
         if (window.audioContextManager) {
             window.audioContextManager.remove(context);
         }
+    }
+    
+    /**
+     * Detect if there's significant audio activity in the buffer
+     * @param {Int16Array} audioData - The audio data to analyze
+     * @returns {boolean} True if significant audio detected
+     */
+    _detectAudioActivity(audioData) {
+        const threshold = 500; // Adjust this value to change sensitivity
+        let sumSquares = 0;
+        
+        // Calculate RMS (Root Mean Square) for volume detection
+        for (let i = 0; i < audioData.length; i++) {
+            sumSquares += audioData[i] * audioData[i];
+        }
+        
+        const rms = Math.sqrt(sumSquares / audioData.length);
+        return rms > threshold;
     }
 }

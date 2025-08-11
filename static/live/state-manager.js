@@ -11,9 +11,10 @@ export class StateManager {
             recording: {
                 isRecording: false,
                 micActive: false,
+                hearingAudio: false,
                 errorMessage: null
             },
-            
+
             // Video state  
             video: {
                 isActive: false,
@@ -21,7 +22,7 @@ export class StateManager {
                 streamActive: false,
                 element: null
             },
-            
+
             // Session state
             session: {
                 userId: null,
@@ -29,7 +30,7 @@ export class StateManager {
                 connectionStatus: 'disconnected', // 'disconnected' | 'connecting' | 'connected' | 'failed'
                 client: null
             },
-            
+
             // UI state
             ui: {
                 transcriptMessages: [],
@@ -37,12 +38,11 @@ export class StateManager {
                 buttonStates: {
                     camera: { text: 'Start Camera', disabled: false },
                     screen: { text: 'Share Screen', disabled: false },
-                    mic: { active: false, status: 'Click the icon to start recording' },
-                    end: { disabled: false }
+                    mic: { active: false, status: 'Muted' }
                 }
             }
         };
-        
+
         // Event listeners for state changes
         this.listeners = new Map();
     }
@@ -57,9 +57,9 @@ export class StateManager {
         if (!this.listeners.has(path)) {
             this.listeners.set(path, new Set());
         }
-        
+
         this.listeners.get(path).add(callback);
-        
+
         // Return unsubscribe function
         return () => {
             const pathListeners = this.listeners.get(path);
@@ -98,14 +98,14 @@ export class StateManager {
      */
     update(updates) {
         const changes = [];
-        
+
         // Collect all changes first
         for (const [path, value] of Object.entries(updates)) {
             const oldValue = this.get(path);
             this._setNestedValue(this.state, path, value);
             changes.push({ path, value, oldValue });
         }
-        
+
         // Notify all listeners
         changes.forEach(({ path, value, oldValue }) => {
             this._notifyListeners(path, value, oldValue);
@@ -131,6 +131,10 @@ export class StateManager {
 
     setRecordingError(errorMessage) {
         this.set('recording.errorMessage', errorMessage);
+    }
+
+    setHearingAudio(hearingAudio) {
+        this.set('recording.hearingAudio', hearingAudio);
     }
 
     // Video state methods
@@ -203,32 +207,29 @@ export class StateManager {
     updateButtonStates() {
         const video = this.get('video');
         const recording = this.get('recording');
-        
+
         const buttonStates = {
             camera: {
                 text: video.isActive && video.mode === 'webcam' ? 'Stop Camera' : 'Start Camera',
                 disabled: false
             },
             screen: {
-                text: video.isActive && video.mode === 'screen' ? 'Stop Sharing' : 'Share Screen', 
+                text: video.isActive && video.mode === 'screen' ? 'Stop Sharing' : 'Share Screen',
                 disabled: false
             },
             mic: {
                 active: recording.micActive,
-                status: recording.isRecording ? 'Recording... Speak now' : 
-                       recording.errorMessage || 'Click the icon to start recording'
-            },
-            end: {
-                disabled: false
+                status: recording.isRecording ? 'Unmuted' :
+                    recording.errorMessage || 'Muted - Click to Unmute'
             }
         };
-        
+
         this.set('ui.buttonStates', buttonStates);
     }
 
     // Helper methods
     _getNestedValue(obj, path) {
-        return path.split('.').reduce((current, key) => 
+        return path.split('.').reduce((current, key) =>
             current && current[key] !== undefined ? current[key] : undefined, obj);
     }
 
@@ -241,7 +242,7 @@ export class StateManager {
             }
             return current[key];
         }, obj);
-        
+
         target[lastKey] = value;
     }
 
@@ -257,7 +258,7 @@ export class StateManager {
                 }
             });
         }
-        
+
         // Notify parent path listeners (e.g., 'recording' listeners when 'recording.isRecording' changes)
         const pathParts = path.split('.');
         for (let i = pathParts.length - 1; i > 0; i--) {

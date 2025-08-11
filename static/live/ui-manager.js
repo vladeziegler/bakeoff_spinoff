@@ -17,7 +17,7 @@ export class UIManager {
         this.screenButton = document.getElementById('screenButton');
         this.webcamVideo = document.getElementById('webcam-video');
         this.webcamPlaceholder = document.getElementById('webcam-placeholder');
-        this.endButton = document.getElementById('end-button');
+        // End button removed - mic button handles start/stop
         this.transcriptContainer = document.getElementById('transcript');
         this.transcriptOuterContainer = document.getElementById('transcript-container');
         this.audioIndicator = document.getElementById('audio-indicator');
@@ -174,10 +174,16 @@ export class UIManager {
      */
     updateMicButtonFromState(recordingState) {
         if (this.micButton) {
-            if (recordingState.micActive) {
-                this.micButton.classList.add('mic-active');
+            // Remove all mic state classes
+            this.micButton.classList.remove('mic-inactive', 'mic-active', 'mic-hearing-audio');
+            
+            // Apply appropriate state class
+            if (!recordingState.isRecording) {
+                this.micButton.classList.add('mic-inactive');
+            } else if (recordingState.hearingAudio) {
+                this.micButton.classList.add('mic-hearing-audio');
             } else {
-                this.micButton.classList.remove('mic-active');
+                this.micButton.classList.add('mic-active');
             }
         }
 
@@ -207,10 +213,7 @@ export class UIManager {
             this.screenButton.disabled = buttonStates.screen.disabled;
         }
         
-        // Update end button
-        if (this.endButton && buttonStates.end) {
-            this.endButton.disabled = buttonStates.end.disabled;
-        }
+        // End button removed - no longer needed
     }
 
     /**
@@ -261,34 +264,31 @@ export class UIManager {
      * Set up event listeners for UI elements
      */
     setupEventListeners(callbacks) {
-        console.log('UIManager setupEventListeners called');
-        console.log('Mic button found:', !!this.micButton);
-        console.log('Camera button found:', !!this.cameraButton);
-        console.log('Screen button found:', !!this.screenButton);
+        // Debug logging:
+        // console.log('UIManager setupEventListeners called');
+        // console.log('Mic button found:', !!this.micButton);
+        // console.log('Camera button found:', !!this.cameraButton);
+        // console.log('Screen button found:', !!this.screenButton);
         
         // Microphone button
         if (this.micButton && callbacks.onMicClick) {
             this.micButton.addEventListener('click', callbacks.onMicClick);
-            console.log('Mic button event listener added');
+            // Debug: console.log('Mic button event listener added');
         }
 
         // Camera button
         if (this.cameraButton && callbacks.onCameraClick) {
             this.cameraButton.addEventListener('click', callbacks.onCameraClick);
-            console.log('Camera button event listener added');
+            // Debug: console.log('Camera button event listener added');
         }
 
         // Screen sharing button
         if (this.screenButton && callbacks.onScreenClick) {
             this.screenButton.addEventListener('click', callbacks.onScreenClick);
-            console.log('Screen button event listener added');
+            // Debug: console.log('Screen button event listener added');
         }
 
-        // End button
-        if (this.endButton && callbacks.onEndClick) {
-            this.endButton.addEventListener('click', callbacks.onEndClick);
-            console.log('End button event listener added');
-        }
+        // End button removed - mic button handles start/stop functionality
 
         // Screen share ended event from browser UI
         if (callbacks.onScreenShareEnded) {

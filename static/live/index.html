@@ -53,17 +53,40 @@
             transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
         }
 
-        .mic-active {
-            background-color: var(--app-interactive-active) !important;
-            box-shadow: 0 0 12px var(--app-shadow-color);
-        }
-
-        .mic-button-base:not(.mic-active) {
+        /* Mic button states */
+        .mic-inactive {
             background-color: var(--app-interactive-default);
         }
 
-        .mic-button-base:not(.mic-active):hover {
+        .mic-inactive:hover {
             background-color: var(--app-interactive-hover);
+        }
+
+        .mic-active {
+            background-color: #3B82F6 !important;
+            /* Blue - recording but no audio */
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .mic-hearing-audio {
+            background-color: #10B981 !important;
+            /* Green - hearing audio */
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+            }
+
+            100% {
+                box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+            }
         }
 
         .mic-button-base .mic-icon {
@@ -215,8 +238,8 @@
                 </div>
 
                 <!-- Center - Main controls -->
-                <div class="flex items-center space-x-6">
-                    <button id="mic-button" class="mic-button-base">
+                <div class="flex flex-col items-center space-y-3">
+                    <button id="mic-button" class="mic-button-base mic-inactive">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 mic-icon" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -224,17 +247,8 @@
                         </svg>
                     </button>
                     <div class="text-center">
-                        <p id="mic-status" class="text-sm font-medium text-[#555555]">Click the icon to start recording
-                        </p>
+                        <p id="mic-status" class="text-sm font-medium text-[#555555]">Muted - Click to Unmute</p>
                     </div>
-                    <button id="end-button"
-                        class="rounded-full bg-gray-700 hover:bg-gray-800 p-3.5 text-white transition-colors duration-150">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
                 </div>
 
                 <!-- Right side - placeholder for balance -->

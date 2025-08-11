@@ -7,20 +7,21 @@ import { SessionManager } from './session-manager.js';
 import { UIManager } from './ui-manager.js';
 import { StateManager } from './state-manager.js';
 
-console.log('AppController imports loaded:', { SessionManager, UIManager, StateManager });
+// Debug logging can be uncommented if needed:
+// console.log('AppController imports loaded:', { SessionManager, UIManager, StateManager });
 
 export class AppController {
     constructor() {
-        console.log('AppController constructor called');
+        // Debug: console.log('AppController constructor called');
         
         // Initialize state manager first
         this.stateManager = new StateManager();
-        console.log('StateManager created');
+        // Debug: console.log('StateManager created');
         
         // Initialize managers with state manager
         this.sessionManager = null;
         this.uiManager = new UIManager(this.stateManager);
-        console.log('UIManager created');
+        // Debug: console.log('UIManager created');
         this.client = null;
         
         // Initialize client first, then session manager
@@ -64,24 +65,12 @@ export class AppController {
      * Set up UI event listeners
      */
     setupUIEventListeners() {
-        console.log('Setting up UI event listeners...');
+        // Debug: console.log('Setting up UI event listeners...');
         this.uiManager.setupEventListeners({
-            onMicClick: () => {
-                console.log('Mic button clicked');
-                this.handleMicClick();
-            },
-            onCameraClick: () => {
-                console.log('Camera button clicked');
-                this.handleCameraClick();
-            },
-            onScreenClick: () => {
-                console.log('Screen button clicked');
-                this.handleScreenClick();
-            },
-            onEndClick: () => {
-                console.log('End button clicked');
-                this.handleEndClick();
-            },
+            onMicClick: () => this.handleMicClick(),
+            onCameraClick: () => this.handleCameraClick(),
+            onScreenClick: () => this.handleScreenClick(),
+            // End button removed - mic button handles start/stop
             onScreenShareEnded: () => this.handleScreenShareEnded()
         });
     }
@@ -124,6 +113,7 @@ export class AppController {
 
         this.client.onAudioReceived = (audioData) => {
             this.uiManager.showAudioIndicator(true);
+            // Don't change mic button state for incoming audio from model
         };
 
         this.client.onTextReceived = (text) => {
@@ -181,6 +171,11 @@ export class AppController {
             currentResponseText = ''; 
             isFirstChunk = true;
         };
+        
+        // Handle audio activity detection for mic button styling
+        this.client.onAudioSent = (hasAudio) => {
+            this.stateManager.setHearingAudio(hasAudio);
+        };
     }
 
     /**
@@ -225,12 +220,13 @@ export class AppController {
     stopRecording() {
         this.client.stopRecording();
         this.uiManager.updateMicButtonState(false);
+        
+        // Reset audio detection state when recording stops
+        this.stateManager.setHearingAudio(false);
 
-        // Remove placeholder message if present
-        const messages = Array.from(this.uiManager.transcriptContainer.children);
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage && lastMessage.textContent === '...' && lastMessage.classList.contains('opacity-60')) {
-            lastMessage.remove();
+        // Remove placeholder message if present using UIManager API
+        if (this.uiManager.hasLastPlaceholderMessage()) {
+            this.uiManager.removePlaceholderUserMessage();
         }
     }
 
@@ -306,18 +302,7 @@ export class AppController {
         }
     }
 
-    /**
-     * Handle end button click
-     */
-    handleEndClick() {
-        if (this.uiManager.getRecordingState()) {
-            this.stopRecording();
-        }
-        
-        this.uiManager.addMessage("Session ended. How else can I help you?", "assistant");
-        this.client.close();
-        this.connectToServer(); // Re-initialize for a new session
-    }
+    // End button functionality removed - mic button handles start/stop
 
     /**
      * Handle screen share ended via browser UI
