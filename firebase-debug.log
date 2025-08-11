@@ -2,3 +2,5 @@
 [debug] [2025-08-08T23:21:52.819Z] > authorizing via signed-in user (luis@luissala.altostrat.com)
 [debug] [2025-08-09T00:12:19.315Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
 [debug] [2025-08-09T00:12:19.317Z] > authorizing via signed-in user (luis@luissala.altostrat.com)
+[debug] [2025-08-09T03:49:53.118Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-08-09T03:49:53.120Z] > authorizing via signed-in user (luis@luissala.altostrat.com)

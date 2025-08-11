@@ -1,0 +1,669 @@
+2025-08-11 12:15:28,593 - main - INFO - Application starting up...
+2025-08-11 12:15:41,469 - main - INFO - Client #4ip1a50gnm5 connected for multimodal session
+2025-08-11 12:15:41,470 - main - INFO - Created new session f47353ec-7d9d-4249-a1ff-cd0ee29e29ab for user 4ip1a50gnm5
+2025-08-11 12:15:45,684 - google_adk.google.adk.models.google_llm - INFO - Connecting to live with llm_request:model='gemini-live-2.5-flash-preview-native-audio' contents=[] config=GenerateContentConfig(
+  system_instruction="""You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question
+
+You are an agent. Your internal name is "budi".
+
+ The description about you is "Root agent that delegates to sub-agents when responding to user queries."""",
+  tools=[
+    Tool(
+      function_declarations=[
+        FunctionDeclaration(
+          description='Agent to answer questions',
+          name='q_and_a',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+        FunctionDeclaration(
+          description='Agent to get the weather',
+          name='weather',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+      ]
+    ),
+  ]
+) live_connect_config=LiveConnectConfig(
+  enable_affective_dialog=True,
+  input_audio_transcription=AudioTranscriptionConfig(),
+  output_audio_transcription=AudioTranscriptionConfig(),
+  proactivity=ProactivityConfig(
+    proactive_audio=True
+  ),
+  realtime_input_config=RealtimeInputConfig(
+    activity_handling=<ActivityHandling.NO_INTERRUPTION: 'NO_INTERRUPTION'>,
+    automatic_activity_detection=AutomaticActivityDetection(
+      disabled=False,
+      end_of_speech_sensitivity=<EndSensitivity.END_SENSITIVITY_HIGH: 'END_SENSITIVITY_HIGH'>,
+      prefix_padding_ms=20,
+      silence_duration_ms=100,
+      start_of_speech_sensitivity=<StartSensitivity.START_SENSITIVITY_HIGH: 'START_SENSITIVITY_HIGH'>
+    ),
+    turn_coverage=<TurnCoverage.TURN_INCLUDES_ALL_INPUT: 'TURN_INCLUDES_ALL_INPUT'>
+  ),
+  speech_config=SpeechConfig(
+    voice_config=VoiceConfig(
+      prebuilt_voice_config=PrebuiltVoiceConfig(
+        voice_name='Aoede'
+      )
+    )
+  ),
+  system_instruction=Content(
+    parts=[
+      Part(
+        text="""You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question
+
+You are an agent. Your internal name is "budi".
+
+ The description about you is "Root agent that delegates to sub-agents when responding to user queries.""""
+      ),
+    ],
+    role='system'
+  ),
+  tools=[
+    Tool(
+      function_declarations=[
+        FunctionDeclaration(
+          description='Agent to answer questions',
+          name='q_and_a',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+        FunctionDeclaration(
+          description='Agent to get the weather',
+          name='weather',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+      ]
+    ),
+  ]
+) tools_dict={'q_and_a': <google.adk.tools.agent_tool.AgentTool object at 0x163d6d580>, 'weather': <google.adk.tools.agent_tool.AgentTool object at 0x163ddbb90>}
+2025-08-11 12:15:45,765 - google.auth._default - DEBUG - Checking None for explicit credentials as part of auth process...
+2025-08-11 12:15:45,765 - google.auth._default - DEBUG - Checking Cloud SDK credentials as part of auth process...
+2025-08-11 12:15:46,369 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2025-08-11 12:15:46,632 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2025-08-11 12:15:47,040 - google_genai.live - INFO - b'{\n  "setupComplete": {\n    "sessionId": "967af4aa-0a8b-4a03-b06d-ea3515ead851"\n  }\n}\n'
+2025-08-11 12:16:54,942 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,969 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,969 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,970 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,970 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,970 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,970 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,972 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,973 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,973 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,973 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,973 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,973 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,974 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,976 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,976 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,977 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,977 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,977 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,977 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,977 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,979 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,979 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,980 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,980 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,980 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,980 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,980 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,982 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,982 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,982 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,983 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,983 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,983 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,984 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,984 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,984 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,985 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,985 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,986 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,986 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,987 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,988 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,990 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,991 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,992 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,993 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,994 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,995 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,997 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,998 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:19,999 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,000 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,001 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,002 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,003 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,004 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,005 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,006 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,007 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,008 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,009 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,010 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,011 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,012 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,013 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,014 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,015 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,016 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,017 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,018 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,020 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,021 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,022 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,023 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,024 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,026 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,026 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,027 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,028 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:20,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:21,326 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:22,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:23,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:24,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:25,326 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:26,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:26,738 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:17:27,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:28,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:29,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:30,135 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:17:30,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:31,336 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:32,341 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:33,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:34,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:34,717 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:17:35,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:36,345 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:37,326 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:38,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:39,336 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:39,972 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:17:40,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:41,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:42,338 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:43,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:44,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:45,331 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:46,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:47,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:48,264 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:17:48,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:49,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:50,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:51,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:52,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:53,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:54,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:54,628 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:17:55,331 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:56,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:57,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:58,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:17:59,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:00,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:01,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:02,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:03,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:03,909 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:18:04,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:05,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:06,346 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:07,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:08,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:09,091 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:18:09,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:10,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:11,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:12,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:13,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:14,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:15,342 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:15,647 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:18:16,325 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:17,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:18,340 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:19,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:20,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:20,410 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:18:21,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:22,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:23,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:24,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:25,331 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:26,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:26,693 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:18:27,334 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:28,339 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:29,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:30,327 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:18:30,330 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:31,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:32,331 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:33,326 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:34,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:35,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:36,329 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:37,215 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:18:37,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:38,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:39,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:40,039 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:18:40,328 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:41,341 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:42,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:43,337 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:44,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:45,333 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:46,327 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:47,332 - main - INFO - Processing video frame from webcam
+2025-08-11 12:18:57,801 - main - INFO - Processing video frame from screen
+2025-08-11 12:18:58,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:18:59,728 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:18:59,782 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:00,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:01,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:02,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:03,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:04,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:05,601 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:19:05,789 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:06,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:07,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:08,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:09,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:38,801 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,600 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,602 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,602 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,609 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,610 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,610 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,611 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,615 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,616 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,616 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,621 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,621 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,622 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,625 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,625 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,626 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,627 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,630 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,631 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,631 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,634 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,635 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,636 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,638 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,640 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,642 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,644 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,645 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,648 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,652 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,655 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:42,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:43,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:44,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:45,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:46,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:47,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:47,933 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:19:48,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:49,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:50,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:51,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:52,721 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:19:52,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:53,794 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:54,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:55,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:56,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:57,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:58,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:19:59,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:00,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:01,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:02,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:03,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:04,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:05,789 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:06,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:07,796 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:08,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:09,794 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:10,798 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:10,983 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:20:11,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:12,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:13,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:14,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:15,573 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:20:15,783 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:16,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:17,789 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:18,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:19,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:20,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:21,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:22,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:23,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:24,789 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:25,789 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:26,566 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:20:26,795 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:27,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:28,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:29,608 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:20:29,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:30,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:31,798 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:32,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:33,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:34,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:35,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:36,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:37,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:38,782 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:39,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:40,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:41,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:42,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:43,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:43,950 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:20:44,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:45,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:46,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:47,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:48,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:48,845 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:20:49,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:50,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:51,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:52,794 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:53,792 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:54,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:55,799 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:56,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:57,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:58,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:20:59,785 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:20:59,793 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:00,803 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:01,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:02,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:03,783 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:04,703 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:21:04,790 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:05,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:12,914 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:26,909 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,305 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,306 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,311 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,311 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,311 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,312 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,315 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,316 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,316 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,320 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,320 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,320 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,321 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,324 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,324 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,325 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,328 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,329 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,329 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,331 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,332 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,333 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,335 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,338 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,343 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,345 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,347 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:35,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:36,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:37,795 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:38,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:39,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:40,780 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:41,781 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:42,022 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:21:42,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:43,509 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:21:43,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:44,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:45,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:46,785 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:47,782 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:48,786 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:49,781 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:50,780 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:51,784 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:52,780 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:53,787 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:54,781 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:55,788 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:56,788 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:21:56,791 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:57,783 - main - INFO - Processing video frame from screen
+2025-08-11 12:21:58,076 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:21:59,633 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:00,637 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:01,634 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:02,635 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:03,634 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:04,349 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:22:04,635 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:05,631 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:05,662 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:22:06,634 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:07,632 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:08,632 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:09,640 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:10,637 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:11,637 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:12,636 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:13,634 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:14,634 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:15,636 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:16,636 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:17,638 - main - INFO - Processing video frame from webcam
+2025-08-11 12:22:18,632 - main - INFO - Processing video frame from webcam
+2025-08-11 12:23:50,025 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:23:51,595 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:25:17,277 - google_adk.google.adk.models.google_llm - INFO - Connecting to live with llm_request:model='gemini-live-2.5-flash-preview-native-audio' contents=[] config=GenerateContentConfig(
+  system_instruction="""You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question
+
+You are an agent. Your internal name is "budi".
+
+ The description about you is "Root agent that delegates to sub-agents when responding to user queries."""",
+  tools=[
+    Tool(
+      function_declarations=[
+        FunctionDeclaration(
+          description='Agent to answer questions',
+          name='q_and_a',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+        FunctionDeclaration(
+          description='Agent to get the weather',
+          name='weather',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+      ]
+    ),
+  ]
+) live_connect_config=LiveConnectConfig(
+  enable_affective_dialog=True,
+  input_audio_transcription=AudioTranscriptionConfig(),
+  output_audio_transcription=AudioTranscriptionConfig(),
+  proactivity=ProactivityConfig(
+    proactive_audio=True
+  ),
+  realtime_input_config=RealtimeInputConfig(
+    activity_handling=<ActivityHandling.NO_INTERRUPTION: 'NO_INTERRUPTION'>,
+    automatic_activity_detection=AutomaticActivityDetection(
+      disabled=False,
+      end_of_speech_sensitivity=<EndSensitivity.END_SENSITIVITY_HIGH: 'END_SENSITIVITY_HIGH'>,
+      prefix_padding_ms=20,
+      silence_duration_ms=100,
+      start_of_speech_sensitivity=<StartSensitivity.START_SENSITIVITY_HIGH: 'START_SENSITIVITY_HIGH'>
+    ),
+    turn_coverage=<TurnCoverage.TURN_INCLUDES_ALL_INPUT: 'TURN_INCLUDES_ALL_INPUT'>
+  ),
+  speech_config=SpeechConfig(
+    voice_config=VoiceConfig(
+      prebuilt_voice_config=PrebuiltVoiceConfig(
+        voice_name='Aoede'
+      )
+    )
+  ),
+  system_instruction=Content(
+    parts=[
+      Part(
+        text="""You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question
+
+You are an agent. Your internal name is "budi".
+
+ The description about you is "Root agent that delegates to sub-agents when responding to user queries.""""
+      ),
+    ],
+    role='system'
+  ),
+  tools=[
+    Tool(
+      function_declarations=[
+        FunctionDeclaration(
+          description='Agent to answer questions',
+          name='q_and_a',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+        FunctionDeclaration(
+          description='Agent to get the weather',
+          name='weather',
+          parameters=Schema(
+            properties={
+              <... Max depth ...>: <... Max depth ...>
+            },
+            required=[
+              <... Max depth ...>,
+            ],
+            type=<Type.OBJECT: 'OBJECT'>
+          ),
+          response=Schema(
+            type=<Type.STRING: 'STRING'>
+          )
+        ),
+      ]
+    ),
+  ]
+) tools_dict={'q_and_a': <google.adk.tools.agent_tool.AgentTool object at 0x163d6d580>, 'weather': <google.adk.tools.agent_tool.AgentTool object at 0x163ddbb90>}
+2025-08-11 12:25:17,916 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2025-08-11 12:25:18,144 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2025-08-11 12:25:18,568 - google_genai.live - INFO - b'{\n  "setupComplete": {\n    "sessionId": "5bcba181-4140-4800-850e-136e7352fae1"\n  }\n}\n'
+2025-08-11 12:26:33,649 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:26:36,934 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:26:45,187 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:26:50,888 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:26:57,968 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:27:02,487 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:27:23,725 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:27:29,999 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:27:45,886 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:27:51,873 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:27:54,571 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:28:04,756 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:28:15,310 - google_adk.google.adk.agents.llm_agent - DEBUG - Skipping output save for agent budi: event authored by user
+2025-08-11 12:28:25,042 - main - DEBUG - [AGENT TO CLIENT]: {'turn_complete': True, 'interrupted': None}
+2025-08-11 12:28:29,713 - main - DEBUG - WebSocket disconnected during message handling

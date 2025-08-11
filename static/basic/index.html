@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <head>
+    <title>ADK Streaming Test (Audio)</title>
+    <script src="/static/basic/js/app.js" type="module"></script>
+    <style>
+      #mic-indicator,
+      #playback-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-left: 10px;
+        background-color: #ccc; /* Default inactive color */
+        transition: background-color 0.3s;
+      }
+
+      #mic-indicator.active {
+        background-color: red;
+      }
+
+      #playback-indicator.active {
+        background-color: green;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>
+      ADK Streaming Test
+      <div id="indicator-container">
+        <div id="mic-indicator" class="indicator"></div>
+        <div id="playback-indicator" class="indicator"></div>
+      </div>
+      <button id="mute-button">Mute</button>
+      <label for="volume-slider">Volume:</label>
+      <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+    </h1>
+    <div id="session-info">
+        <div>User ID: <span id="user-id"></span></div>
+        <div>Session ID: <span id="session-id"></span></div>
+        <button id="reset-session-button">Reset Session</button>
+    </div>
+    <div
+      id="messages"
+      style="height: 300px; overflow-y: auto; border: 1px solid black"></div>
+    <br />
+
+    <form id="messageForm">
+      <label for="message">Message:</label>
+      <input type="text" id="message" name="message" />
+      <button type="submit" id="sendButton" disabled>Send</button>
+    </form>
+  </body>
+
+</html>

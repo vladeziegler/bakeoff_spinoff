@@ -13,10 +13,9 @@
 # limitations under the License.
 
 from google.adk.agents import Agent
-from google.adk.tools import google_search  # Import the tool
+from google.adk.tools import google_search, AgentTool  # Import the tool
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +77,7 @@ def get_weather(city: str, state: str) -> dict:
 q_and_a_agent = Agent(
     # A unique name for the agent.
     name="q_and_a",
-    model=config.live_model,
+    model=config.general_model,
     instruction="You can answer questions about various topics. If you don't know the answer, you can use the google_search tool to find information.",
     description="Agent to answer questions",
     # Add google_search tool to perform grounding with Google search.
@@ -104,5 +103,5 @@ root_agent = Agent(
     # Instructions to set the agent's behavior.
     instruction="You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question",
     # Add google_search tool to perform grounding with Google search.
-    sub_agents=[q_and_a_agent, weather_agent],
+    tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent)],
 )
