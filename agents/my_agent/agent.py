@@ -27,7 +27,8 @@ class Config:
 
     def __init__(self):
         self.root_agent_name = "vertex"
-        self.live_model = "gemini-live-2.5-flash-preview-native-audio"
+        # self.live_model = "gemini-live-2.5-flash-preview-native-audio"
+        self.live_model = "gemini-live-2.5-flash"
         self.general_model = "gemini-2.5-flash"
 
 
