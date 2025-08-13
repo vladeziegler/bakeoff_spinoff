@@ -1,6 +1,8 @@
 # Makefile for the ADK Streaming Test
 
-.PHONY: help install run adk-api
+.PHONY: help install run adk-api run-a2a-agent adk-web run
+
+# This is a sample Makefile for a Python project.
 
 help:
 	@echo "Commands:"
@@ -18,6 +20,10 @@ adk-api:
 
 adk-web:
 	uv run adk web --reload_agents --port 8882 --allow_origins '*' --host 0.0.0.0 agents
+
+run-a2a-agent:
+	# Start the remote agent using uvicorn
+	uv run uvicorn agents.a2a_remote_agent.agent:a2a_app --host localhost --port 8001
 
 dev:
 	uv run python main.py

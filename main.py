@@ -49,7 +49,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 from google.adk.agents.run_config import StreamingMode
-from agents.my_agent.agent import root_agent
+from agents.live_api_agent.agent import root_agent
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
@@ -212,7 +212,6 @@ async def start_agent_session(user_id, force_new_session=False):
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
         response_modalities=["AUDIO"],  # AUDIO or TEXT
-        media_resolution=MediaResolution.MEDIA_RESOLUTION_HIGH,
         speech_config=speech_config,
         enable_affective_dialog=True,
         proactivity={

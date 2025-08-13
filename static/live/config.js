@@ -36,7 +36,7 @@ export const QUEUE_CONFIG = {
     video: {
         outbound: {
             maxSize: 2,                      // Only keep latest frames
-            rateLimitMs: 1000,               // 1 FPS default
+            rateLimitMs: 2000,               // 0.5 FPS (1 frame every 2 seconds)
             batchSize: 1,
             timeoutMs: 2000,
             priority: 'LOW',                 // Video priority
@@ -140,7 +140,7 @@ export const VIDEO_CONFIG = {
     },
 
     // Video streaming
-    defaultFrameRate: 1,              // Frames per second to send
+    defaultFrameRate: 0.5,            // Frames per second to send (1 frame every 2 seconds)
     maxFrameRate: 5,
     jpegQuality: 0.8,
 

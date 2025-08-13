@@ -14,6 +14,8 @@
 
 from google.adk.agents import Agent
 from google.adk.tools import google_search, AgentTool  # Import the tool
+from google.adk.agents.remote_a2a_agent import AGENT_CARD_WELL_KNOWN_PATH
+from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,14 @@ weather_agent = Agent(
 )
 
 
+remote_agent = RemoteA2aAgent(
+    name="hello_world_agent",
+    description=(
+        "Helpful assistant that can roll dice and check if numbers are prime."
+    ),
+    agent_card=f"http://localhost:8001/{AGENT_CARD_WELL_KNOWN_PATH}",
+)
+
 main_agent_prompt = """
 You are a friendly and helpful AI assistant with a charming personality. 
 
@@ -124,5 +134,5 @@ root_agent = Agent(
     # Instructions to set the agent's behavior.
     instruction=main_agent_prompt,
     # Add google_search tool to perform grounding with Google search.
-    tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent)],
+    tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent), AgentTool(remote_agent)],
 )
