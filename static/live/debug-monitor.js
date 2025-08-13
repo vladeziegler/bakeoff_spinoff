@@ -13,6 +13,18 @@ window.debugTransmission = function() {
         return;
     }
     
+    // Show gap analysis if available
+    if (window.audioClient && typeof window.audioClient.getGapAnalysis === 'function') {
+        const gapAnalysis = window.audioClient.getGapAnalysis();
+        console.log('🎵 Audio Gap Analysis:');
+        console.log('  -', gapAnalysis.summary);
+        console.log('  -', gapAnalysis.largeGaps);
+        console.log('  -', gapAnalysis.averageGap);
+        console.log('  -', gapAnalysis.currentThreshold);
+        console.log('  - Recommendation:', gapAnalysis.recommendation);
+        console.log('');
+    }
+    
     console.log('📊 Connection Status:');
     console.log('  - Connected:', stats.isConnected);
     console.log('  - Recording:', stats.isRecording);

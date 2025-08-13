@@ -21,6 +21,8 @@ export class UIManager {
         this.transcriptContainer = document.getElementById('transcript');
         this.transcriptOuterContainer = document.getElementById('transcript-container');
         this.audioIndicator = document.getElementById('audio-indicator');
+        this.volumeSlider = document.getElementById('volume-slider');
+        this.volumeDisplay = document.getElementById('volume-display');
 
         // Subscribe to state changes
         this.subscriptions = [];
@@ -264,6 +266,26 @@ export class UIManager {
     }
 
     /**
+     * Update volume display
+     */
+    updateVolumeDisplay(volume) {
+        if (this.volumeDisplay) {
+            this.volumeDisplay.textContent = `${volume}%`;
+        }
+    }
+
+    /**
+     * Set volume slider value programmatically
+     */
+    setVolumeSlider(volume) {
+        if (this.volumeSlider) {
+            const volumePercent = Math.round(volume * 100);
+            this.volumeSlider.value = volumePercent;
+            this.updateVolumeDisplay(volumePercent);
+        }
+    }
+
+    /**
      * Set up event listeners for UI elements
      */
     setupEventListeners(callbacks) {
@@ -296,6 +318,16 @@ export class UIManager {
         // Screen share ended event from browser UI
         if (callbacks.onScreenShareEnded) {
             window.addEventListener('screenshare-ended', callbacks.onScreenShareEnded);
+        }
+
+        // Volume slider
+        if (this.volumeSlider && callbacks.onVolumeChange) {
+            this.volumeSlider.addEventListener('input', (event) => {
+                const volume = parseInt(event.target.value);
+                this.updateVolumeDisplay(volume);
+                callbacks.onVolumeChange(volume / 100); // Convert to 0.0-1.0 range
+            });
+            // Debug: console.log('Volume slider event listener added');
         }
     }
 

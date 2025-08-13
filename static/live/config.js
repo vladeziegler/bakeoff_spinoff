@@ -13,7 +13,7 @@ export const QUEUE_CONFIG = {
         healthCheckIntervalMs: 10000,
         autoTuning: true
     },
-    
+
     // Audio queue configuration
     audio: {
         outbound: {
@@ -31,7 +31,7 @@ export const QUEUE_CONFIG = {
             mode: 'realtime'                 // Processing mode
         }
     },
-    
+
     // Video queue configuration  
     video: {
         outbound: {
@@ -47,7 +47,7 @@ export const QUEUE_CONFIG = {
             mode: 'immediate'
         }
     },
-    
+
     // Text message configuration
     text: {
         outbound: {
@@ -65,7 +65,7 @@ export const QUEUE_CONFIG = {
             mode: 'chunked'
         }
     },
-    
+
     // Control message configuration
     control: {
         outbound: {
@@ -87,16 +87,16 @@ export const WEBSOCKET_CONFIG = {
     // Default connection settings
     defaultHost: 'localhost',
     defaultPort: 8881,
-    
+
     // Connection retry settings
     maxReconnectAttempts: 5,
     reconnectDelayMs: 1000,
     reconnectBackoffMultiplier: 1.5,
-    
+
     // Health check settings
     pingIntervalMs: 30000,
     pongTimeoutMs: 5000,
-    
+
     // Message size limits
     maxMessageSizeBytes: 1024 * 1024, // 1MB
     maxQueuedMessages: 1000
@@ -104,19 +104,20 @@ export const WEBSOCKET_CONFIG = {
 
 // Audio processing configuration
 export const AUDIO_CONFIG = {
-    // Audio context settings
-    sampleRate: 22000,
+    // Audio context settings (Live API specs)
+    inputSampleRate: 16000,  // Live API native input rate
+    outputSampleRate: 24000, // Live API output rate
     bufferSize: 2048,
     channels: 1,
-    
+
     // Audio worklet settings
     workletBufferSize: 128,
     workletUpdateIntervalMs: 46,
-    
+
     // Audio activity detection
     activityThreshold: 0.01,
     activitySmoothingFactor: 0.8,
-    
+
     // Audio playback
     playbackBufferSize: 4096,
     maxPlaybackLatencyMs: 200
@@ -124,28 +125,28 @@ export const AUDIO_CONFIG = {
 
 // Video processing configuration
 export const VIDEO_CONFIG = {
-    // Default video constraints
+    // Default video constraints (720p HD)
     defaultConstraints: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
         frameRate: { ideal: 30, max: 30 }
     },
-    
+
     // Screen share constraints
     screenConstraints: {
         width: { ideal: 1280 },
         height: { ideal: 720 },
         frameRate: { ideal: 15, max: 30 }
     },
-    
+
     // Video streaming
     defaultFrameRate: 1,              // Frames per second to send
     maxFrameRate: 5,
     jpegQuality: 0.8,
-    
-    // Video canvas settings
-    canvasWidth: 640,
-    canvasHeight: 480
+
+    // Video canvas settings (720p HD)
+    canvasWidth: 1280,
+    canvasHeight: 720
 };
 
 // UI configuration
@@ -153,15 +154,15 @@ export const UI_CONFIG = {
     // Transcript settings
     maxTranscriptMessages: 1000,
     transcriptScrollBehavior: 'smooth',
-    
+
     // Button states and animations
     micButtonAnimationDuration: 200,
     audioIndicatorPulseRate: 1500,
-    
+
     // Queue health indicators
     showQueueHealth: false,
     healthIndicatorUpdateMs: 1000,
-    
+
     // Debug UI
     showDebugInfo: false,
     debugPanelPosition: 'bottom-right'
@@ -172,15 +173,15 @@ export const PERFORMANCE_CONFIG = {
     // Memory management
     maxMemoryUsageMb: 100,
     gcIntervalMs: 60000,
-    
+
     // Performance monitoring
     enablePerformanceMonitoring: true,
     performanceLogIntervalMs: 30000,
-    
+
     // Resource cleanup
     audioContextCleanupDelayMs: 5000,
     inactiveStreamCleanupMs: 300000,  // 5 minutes
-    
+
     // Throttling
     maxConcurrentProcessing: 3,
     backgroundTaskDelayMs: 100
@@ -193,12 +194,12 @@ export const DEBUG_CONFIG = {
     enableConsoleLogging: true,
     enableQueueLogging: false,
     enablePerformanceLogging: false,
-    
+
     // Testing modes
     simulateNetworkIssues: false,
     simulateHighLatency: false,
     simulatePacketLoss: false,
-    
+
     // Mock data
     enableMockAudio: false,
     enableMockVideo: false,
@@ -225,19 +226,19 @@ export function getWebSocketUrl(appName = 'my_agent', userId = 'user', sessionId
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = CONFIG.websocket.host || CONFIG.websocket.defaultHost || window.location.hostname;
     const port = CONFIG.websocket.port || CONFIG.websocket.defaultPort || window.location.port;
-    
+
     let url = `${protocol}//${host}`;
     if (port && port !== '80' && port !== '443') {
         url += `:${port}`;
     }
-    
+
     // Use new API format with query parameters
     url += `/run_live?app_name=${encodeURIComponent(appName)}&user_id=${encodeURIComponent(userId)}`;
-    
+
     if (sessionId) {
         url += `&session_id=${encodeURIComponent(sessionId)}`;
     }
-    
+
     return url;
 }
 
@@ -247,7 +248,7 @@ export function getWebSocketUrl(appName = 'my_agent', userId = 'user', sessionId
 export function updateConfig(path, value) {
     const keys = path.split('.');
     let current = CONFIG;
-    
+
     for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i];
         if (!(key in current)) {
@@ -255,9 +256,9 @@ export function updateConfig(path, value) {
         }
         current = current[key];
     }
-    
+
     current[keys[keys.length - 1]] = value;
-    
+
     console.log(`Updated config ${path} =`, value);
 }
 
@@ -267,7 +268,7 @@ export function updateConfig(path, value) {
 export function getConfig(path, defaultValue = null) {
     const keys = path.split('.');
     let current = CONFIG;
-    
+
     for (const key of keys) {
         if (current && typeof current === 'object' && key in current) {
             current = current[key];
@@ -275,7 +276,7 @@ export function getConfig(path, defaultValue = null) {
             return defaultValue;
         }
     }
-    
+
     return current;
 }
 
@@ -284,55 +285,67 @@ export function getConfig(path, defaultValue = null) {
  */
 export function validateConfig() {
     const errors = [];
-    
+
     // Validate queue settings
     if (CONFIG.queue.audio.outbound.maxSize < 2) {
         errors.push('Audio queue size too small (minimum 2)');
     }
-    
-    if (CONFIG.audio.sampleRate < 8000 || CONFIG.audio.sampleRate > 48000) {
-        errors.push('Invalid audio sample rate (must be 8000-48000 Hz)');
+
+    if (CONFIG.audio.inputSampleRate < 8000 || CONFIG.audio.inputSampleRate > 48000) {
+        errors.push('Invalid input audio sample rate (must be 8000-48000 Hz)');
     }
-    
+
+    if (CONFIG.audio.outputSampleRate < 8000 || CONFIG.audio.outputSampleRate > 48000) {
+        errors.push('Invalid output audio sample rate (must be 8000-48000 Hz)');
+    }
+
+    if (CONFIG.audio.inputSampleRate !== 16000) {
+        console.warn('Input sample rate is not 16kHz - Live API natively supports 16kHz input');
+    }
+
+    if (CONFIG.audio.outputSampleRate !== 24000) {
+        console.warn('Output sample rate is not 24kHz - Live API outputs at 24kHz');
+    }
+
     if (CONFIG.video.defaultFrameRate > CONFIG.video.maxFrameRate) {
         errors.push('Default video frame rate exceeds maximum');
     }
-    
+
     // Validate queue priorities are valid
     const validPriorities = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
     const queueTypes = ['audio', 'video', 'text', 'control'];
-    
+
     for (const type of queueTypes) {
         const priority = CONFIG.queue[type].outbound.priority;
         if (priority && !validPriorities.includes(priority)) {
             errors.push(`Invalid priority '${priority}' for ${type} queue`);
         }
     }
-    
+
     // Validate overflow strategies
     const validStrategies = ['DROP_OLDEST', 'DROP_NEWEST', 'REPLACE_NEWEST', 'FAIL_SEND', 'COMPRESS'];
-    
+
     for (const type of queueTypes) {
         const strategy = CONFIG.queue[type].outbound.overflowStrategy;
         if (strategy && !validStrategies.includes(strategy)) {
             errors.push(`Invalid overflow strategy '${strategy}' for ${type} queue`);
         }
     }
-    
+
     // Validate rate limits are reasonable
     if (CONFIG.queue.audio.outbound.rateLimitMs < 10) {
         errors.push('Audio rate limit too aggressive (minimum 10ms)');
     }
-    
+
     if (CONFIG.queue.video.outbound.rateLimitMs < 100) {
         errors.push('Video rate limit too aggressive (minimum 100ms)');
     }
-    
+
     if (errors.length > 0) {
         console.error('Configuration validation errors:', errors);
         return false;
     }
-    
+
     return true;
 }
 
@@ -344,16 +357,16 @@ export function loadConfig() {
         const savedConfig = localStorage.getItem('adk-streaming-config');
         if (savedConfig) {
             const parsed = JSON.parse(savedConfig);
-            
+
             // Merge saved config with defaults
             Object.assign(CONFIG, parsed);
-            
+
             console.log('Loaded configuration from localStorage');
         }
     } catch (error) {
         console.warn('Failed to load saved configuration:', error);
     }
-    
+
     return validateConfig();
 }
 

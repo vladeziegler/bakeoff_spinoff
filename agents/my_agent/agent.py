@@ -27,8 +27,8 @@ class Config:
 
     def __init__(self):
         self.root_agent_name = "vertex"
-        # self.live_model = "gemini-live-2.5-flash-preview-native-audio"
-        self.live_model = "gemini-live-2.5-flash"
+        self.live_model_native = "gemini-live-2.5-flash-preview-native-audio"
+        self.live_model_standard = "gemini-live-2.5-flash"
         self.general_model = "gemini-2.5-flash"
 
 
@@ -80,7 +80,7 @@ q_and_a_agent = Agent(
     name="q_and_a",
     model=config.general_model,
     instruction="You can answer questions about various topics. If you don't know the answer, you can use the google_search tool to find information.",
-    description="Agent to answer questions",
+    description="Agent to answer questions and perform web searches using Google Search.",
     # Add google_search tool to perform grounding with Google search.
     tools=[google_search],
 )
@@ -118,7 +118,7 @@ root_agent = Agent(
     # A unique name for the agent.
     name=config.root_agent_name,
     # The Large Language Model (LLM) that agent will use.
-    model=config.live_model,
+    model=config.live_model_standard,
     # A short description of the agent's purpose.
     description="Root agent that delegates to sub-agents when responding to user queries.",
     # Instructions to set the agent's behavior.

@@ -37,6 +37,7 @@ from google.genai.types import (
     PrebuiltVoiceConfigDict,
     SpeechConfig,
     AudioTranscriptionConfig,
+    MediaResolution,
 )
 
 from google.adk.runners import InMemoryRunner
@@ -211,6 +212,7 @@ async def start_agent_session(user_id, force_new_session=False):
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
         response_modalities=["AUDIO"],  # AUDIO or TEXT
+        media_resolution=MediaResolution.MEDIA_RESOLUTION_HIGH,
         speech_config=speech_config,
         enable_affective_dialog=True,
         proactivity={
@@ -330,12 +332,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 try:
                     message = await websocket.receive_text()
                     data = json.loads(message)
-                    if data.get("mime_type") == "audio/pcm":
+                    if data.get("mime_type").startswith("audio/pcm"):
                         # Decode base64 audio data
                         audio_bytes = base64.b64decode(data.get("data", ""))
                         # Put audio in queue for processing
                         live_request_queue.send_realtime(
-                            Blob(data=audio_bytes, mime_type="audio/pcm")
+                            Blob(data=audio_bytes, mime_type=data.get("mime_type"))
                         )
                     elif data.get("mime_type") == "image/jpeg":
                         # Decode base64 video frame

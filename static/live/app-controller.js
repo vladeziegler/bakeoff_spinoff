@@ -75,6 +75,17 @@ export class AppController {
         window.getTransmissionStats = () => {
             return this.client ? this.client.getTransmissionStats() : null;
         };
+        
+        // Expose volume control for debugging
+        window.setPlaybackVolume = (volume) => {
+            if (this.client && this.client.setPlaybackVolume) {
+                this.client.setPlaybackVolume(volume);
+                // Update UI slider to match
+                this.uiManager.setVolumeSlider(volume);
+            } else {
+                console.log('Client not available or volume control not supported');
+            }
+        };
     }
 
     /**
@@ -87,7 +98,8 @@ export class AppController {
             onCameraClick: () => this.handleCameraClick(),
             onScreenClick: () => this.handleScreenClick(),
             // End button removed - mic button handles start/stop
-            onScreenShareEnded: () => this.handleScreenShareEnded()
+            onScreenShareEnded: () => this.handleScreenShareEnded(),
+            onVolumeChange: (volume) => this.handleVolumeChange(volume)
         });
     }
 
@@ -338,6 +350,18 @@ export class AppController {
         const videoState = this.uiManager.getVideoState();
         if (videoState.mode === 'screen') {
             this.uiManager.updateVideoDisplay(false, null);
+        }
+    }
+
+    /**
+     * Handle volume change from UI slider
+     */
+    handleVolumeChange(volume) {
+        if (this.client && this.client.setPlaybackVolume) {
+            this.client.setPlaybackVolume(volume);
+            console.log(`🔊 Volume changed to ${Math.round(volume * 100)}%`);
+        } else {
+            console.warn('Client not available for volume control');
         }
     }
 
