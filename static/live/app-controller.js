@@ -6,6 +6,9 @@
 import { SessionManager } from './session-manager.js';
 import { UIManager } from './ui-manager.js';
 import { StateManager } from './state-manager.js';
+import { MultimodalClient } from './multimodal-client.js';
+import { enableQueueDebugging } from './queue-debug.js';
+import { CONFIG } from './config.js';
 
 // Debug logging can be uncommented if needed:
 // console.log('AppController imports loaded:', { SessionManager, UIManager, StateManager });
@@ -59,6 +62,19 @@ export class AppController {
         
         // Connect to server
         this.connectToServer();
+        
+        // Enable queue debugging if in debug mode
+        if (CONFIG.debug.enableQueueLogging || CONFIG.ui.showQueueHealth) {
+            this._enableQueueDebugging();
+        }
+        
+        // Start queue health monitoring
+        this._startQueueHealthMonitoring();
+        
+        // Expose transmission stats globally for debugging
+        window.getTransmissionStats = () => {
+            return this.client ? this.client.getTransmissionStats() : null;
+        };
     }
 
     /**
@@ -375,6 +391,9 @@ export class AppController {
             this.client.close();
         }
         
+        // Stop queue health monitoring
+        this._stopQueueHealthMonitoring();
+        
         // Cleanup managers
         if (this.uiManager) {
             this.uiManager.destroy();
@@ -385,5 +404,128 @@ export class AppController {
         }
         
         console.log('AppController destroyed and resources cleaned up');
+    }
+
+    /**
+     * Enable queue debugging and monitoring
+     */
+    _enableQueueDebugging() {
+        if (this.client && this.client.queueManager) {
+            enableQueueDebugging(this.client.queueManager);
+            console.log('Queue debugging enabled. Press Ctrl+Shift+Q to toggle debug panel.');
+        }
+    }
+
+    /**
+     * Start queue health monitoring and automatic recovery
+     */
+    _startQueueHealthMonitoring() {
+        // Monitor queue health every 10 seconds
+        this.queueHealthInterval = setInterval(() => {
+            if (this.client && this.client.queueManager) {
+                const status = this.client.queueManager.getStatus();
+                this._handleQueueHealth(status);
+            }
+        }, 10000);
+    }
+
+    /**
+     * Handle queue health status and implement recovery strategies
+     */
+    _handleQueueHealth(status) {
+        if (status.overallHealth === 'critical') {
+            console.warn('Queue health critical, implementing recovery strategies');
+            
+            // Strategy 1: Clear queues if they're backed up
+            Object.entries(status.outbound).forEach(([type, queueStatus]) => {
+                if (queueStatus.totalSize > queueStatus.maxSize * 0.9) {
+                    console.warn(`Clearing backed up ${type} outbound queue`);
+                    this.client.queueManager.outboundQueues.get(type)?.clear();
+                }
+            });
+            
+            // Strategy 2: Reset queue configuration to more conservative settings
+            this._applyConservativeQueueSettings();
+            
+            // Strategy 3: Notify UI of issues
+            if (this.uiManager) {
+                this.uiManager.addMessage("Connection quality degraded, adjusting performance...", "assistant");
+            }
+            
+        } else if (status.overallHealth === 'degraded') {
+            console.info('Queue health degraded, applying optimizations');
+            
+            // Strategy: Adjust connection quality and queue settings
+            const connectionQuality = this._assessConnectionQuality(status);
+            this.client.queueManager.setConnectionState(status.connected, connectionQuality);
+        }
+    }
+
+    /**
+     * Apply conservative queue settings during recovery
+     */
+    _applyConservativeQueueSettings() {
+        if (this.client && this.client.queueManager) {
+            const conservativeConfig = {
+                audio: {
+                    outbound: {
+                        maxSize: 50,        // Reduce buffer size
+                        rateLimitMs: 50     // Slow down audio
+                    }
+                },
+                video: {
+                    outbound: {
+                        rateLimitMs: 2000   // Reduce video frame rate
+                    }
+                }
+            };
+            
+            this.client.queueManager.updateConfig(conservativeConfig);
+            console.log('Applied conservative queue settings for recovery');
+        }
+    }
+
+    /**
+     * Assess connection quality based on queue metrics
+     */
+    _assessConnectionQuality(status) {
+        let qualityScore = 100;
+        
+        // Penalize based on queue depth
+        Object.values(status.outbound).forEach(queue => {
+            if (queue.totalSize > queue.maxSize * 0.7) {
+                qualityScore -= 20;
+            }
+        });
+        
+        // Penalize based on drop rates
+        Object.values(status.metrics?.queues || {}).forEach(metrics => {
+            const dropRate = parseFloat(metrics.health?.dropRate || 0);
+            if (dropRate > 5) {
+                qualityScore -= dropRate * 2;
+            }
+        });
+        
+        // Return quality assessment
+        if (qualityScore > 80) return 'good';
+        if (qualityScore > 50) return 'fair';
+        return 'poor';
+    }
+
+    /**
+     * Get queue status for external monitoring
+     */
+    getQueueStatus() {
+        return this.client ? this.client.getQueueStatus() : null;
+    }
+
+    /**
+     * Stop queue health monitoring
+     */
+    _stopQueueHealthMonitoring() {
+        if (this.queueHealthInterval) {
+            clearInterval(this.queueHealthInterval);
+            this.queueHealthInterval = null;
+        }
     }
 }

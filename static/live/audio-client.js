@@ -1,8 +1,17 @@
 /**
  * Audio processing client for bidirectional audio AI communication
+ * Enhanced with message queuing system
  */
 
-class AudioClient {
+import { MessageQueueManager } from './message-queue-manager.js';
+import { CONFIG } from './config.js';
+
+// Ensure CONFIG is available
+if (typeof CONFIG === 'undefined') {
+    console.error('CONFIG not available, queue system will be disabled');
+}
+
+export class AudioClient {
     constructor(serverUrl = 'ws://localhost:8882') {
         this.serverUrl = serverUrl;
         this.ws = null;
@@ -25,10 +34,43 @@ class AudioClient {
         this.onInterrupted = () => { };
         this.onSessionIdReceived = (sessionId) => { };
 
-        // Audio playback
+        // Audio playback (legacy - will be replaced by queue system)
         this.audioQueue = [];
         this.isPlaying = false;
         this.currentSource = null;
+
+        // Message queue manager with error boundary
+        try {
+            // Check if CONFIG is available and properly structured
+            if (typeof CONFIG === 'undefined' || !CONFIG.queue) {
+                console.warn('CONFIG not available or incomplete, disabling queue system');
+                this.queueManager = null;
+            } else {
+                // Convert CONFIG.queue structure to MessageQueueManager expected format
+                const queueConfig = {
+                    enabled: CONFIG.queue.global?.enabled !== false,
+                    debugMode: CONFIG.debug?.enableQueueLogging || false,
+                    maxMemoryMb: CONFIG.queue.global?.maxMemoryMb || 50,
+                    healthCheckIntervalMs: CONFIG.queue.global?.healthCheckIntervalMs || 5000,
+                    autoTuning: CONFIG.queue.global?.autoTuning !== false,
+                    // Flatten audio config
+                    audioMaxSize: CONFIG.queue.audio?.outbound?.maxSize || 100,
+                    audioRateLimitMs: CONFIG.queue.audio?.outbound?.rateLimitMs || 23,
+                    audioBufferMs: CONFIG.queue.audio?.inbound?.bufferSizeMs || 200,
+                    // Flatten video config
+                    videoRateLimitMs: CONFIG.queue.video?.outbound?.rateLimitMs || 1000,
+                    // Flatten text config
+                    textChunkTimeout: CONFIG.queue.text?.inbound?.chunkTimeout || 500
+                };
+                
+                this.queueManager = new MessageQueueManager(queueConfig);
+                this._setupQueueHandlers();
+                console.log('Queue manager initialized successfully');
+            }
+        } catch (error) {
+            console.error('Failed to initialize queue manager:', error);
+            this.queueManager = null; // Fallback to direct WebSocket communication
+        }
 
         // Clean up any existing audioContexts
         if (window.existingAudioContexts) {
@@ -43,6 +85,164 @@ class AudioClient {
 
         // Keep track of audio contexts created
         window.existingAudioContexts = window.existingAudioContexts || [];
+        
+        // Initialize audio context tracking
+        this.initializeAudioContextTracking();
+        
+        // Message tracking for debugging
+        this.messagesSent = {
+            audio: 0,
+            video: 0, 
+            text: 0,
+            control: 0
+        };
+        
+        // Audio initialization state
+        this.isInitializingAudio = false;
+    }
+
+    /**
+     * Setup queue handlers for sending and receiving messages
+     */
+    _setupQueueHandlers() {
+        if (!this.queueManager) return;
+        
+        // Handle outbound messages (sending to server)
+        this.queueManager.onSend = async (messageType, data, options) => {
+            try {
+                return await this._sendDirectToWebSocket(messageType, data, options);
+            } catch (error) {
+                console.error(`Error sending ${messageType} message:`, error);
+                return false;
+            }
+        };
+
+        // Handle inbound messages (processing received messages)
+        this.queueManager.onReceive = async (messageType, data, metadata) => {
+            try {
+                return await this._processInboundMessage(messageType, data, metadata);
+            } catch (error) {
+                console.error(`Error processing ${messageType} message:`, error);
+                throw error; // Re-throw to allow queue to handle retry logic
+            }
+        };
+
+        // Handle queue errors
+        this.queueManager.onError = (queueType, error) => {
+            console.error(`Queue error in ${queueType}:`, error);
+            if (this.onError) {
+                this.onError(error);
+            }
+        };
+
+        // Handle queue health changes
+        this.queueManager.onHealthChange = (health, status) => {
+            if (health === 'critical') {
+                console.warn('Queue health critical:', status);
+                // Could implement fallback to direct communication here
+            }
+        };
+    }
+
+    /**
+     * Send message directly to WebSocket (used by queue manager)
+     */
+    async _sendDirectToWebSocket(messageType, data, options) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.warn(`Cannot send ${messageType} message: WebSocket not open`);
+            return false;
+        }
+
+        try {
+            // Convert queue data format to WebSocket message format
+            let message;
+            if (typeof data === 'object' && data.mime_type) {
+                // Already in correct format
+                message = data;
+            } else {
+                // Convert based on message type
+                switch (messageType) {
+                    case 'audio':
+                        message = {
+                            mime_type: 'audio/pcm',
+                            data: data
+                        };
+                        break;
+                    case 'video':
+                        message = {
+                            mime_type: 'image/jpeg',
+                            data: data.data || data,
+                            mode: data.mode || 'webcam'
+                        };
+                        break;
+                    case 'text':
+                        message = {
+                            mime_type: 'text/plain',
+                            data: data
+                        };
+                        break;
+                    case 'control':
+                        message = data; // Control messages should already be formatted
+                        break;
+                    default:
+                        message = data;
+                }
+            }
+
+            this.ws.send(JSON.stringify(message));
+            this.messagesSent[messageType] = (this.messagesSent[messageType] || 0) + 1;
+            
+            // Log periodically to avoid spam, but show we're sending
+            if (messageType === 'audio' && this.messagesSent[messageType] % 50 === 0) {
+                console.log(`📤 AUDIO: Sent ${this.messagesSent[messageType]} audio messages`);
+            } else if (messageType !== 'audio') {
+                console.log(`📤 SENT ${messageType} message:`, message.mime_type, 
+                           message.data?.substring ? message.data.substring(0, 50) + '...' : `${message.data?.length || 0} bytes`);
+            }
+            return true;
+        } catch (error) {
+            console.error(`Error sending ${messageType} message:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Process inbound message from queue system
+     */
+    async _processInboundMessage(messageType, data, metadata) {
+        try {
+            switch (messageType) {
+                case 'audio':
+                    this.onAudioReceived(data);
+                    await this.playAudio(data);
+                    break;
+                    
+                case 'text':
+                    const role = metadata.role || 'model';
+                    this.onTextReceived(data, role);
+                    break;
+                    
+                case 'video':
+                    // Handle inbound video (for future features like model-generated images)
+                    if (this.onVideoReceived) {
+                        this.onVideoReceived(data, metadata);
+                    }
+                    break;
+                    
+                case 'control':
+                    // Handle control messages (if needed)
+                    console.log('Control message processed:', data);
+                    break;
+                    
+                default:
+                    console.warn(`Unknown inbound message type: ${messageType}`);
+            }
+            
+            return data;
+        } catch (error) {
+            console.error(`Error processing ${messageType} message:`, error);
+            throw error;
+        }
     }
 
     // Connect to the WebSocket server
@@ -74,14 +274,20 @@ class AudioClient {
                 }, 5000);
 
                 this.ws.onopen = () => {
-                    console.log('WebSocket connection established');
+                    console.log('🔗 WebSocket connection established to:', this.serverUrl);
                     clearTimeout(connectionTimeout);
                     this.reconnectAttempts = 0; // Reset on successful connection
+                    if (this.queueManager) {
+                        this.queueManager.setConnectionState(true, 'good');
+                    }
                 };
 
                 this.ws.onclose = (event) => {
                     console.log('WebSocket connection closed:', event.code, event.reason);
                     this.isConnected = false;
+                    if (this.queueManager) {
+                        this.queueManager.setConnectionState(false, 'offline');
+                    }
 
                     // Try to reconnect if it wasn't a normal closure
                     if (event.code !== 1000 && event.code !== 1001) {
@@ -112,15 +318,63 @@ class AudioClient {
                             resolve();
                         }
                         else if (message.mime_type === 'audio/pcm') {
-                            // Handle receiving audio data from server
-                            const audioData = message.data;
-                            this.onAudioReceived(audioData);
-                            await this.playAudio(audioData);
+                            // Process audio through queue system
+                            try {
+                                if (this.queueManager) {
+                                    await this.queueManager.receive('audio', message.data, {
+                                        contentType: 'audio/pcm',
+                                        timestamp: Date.now()
+                                    });
+                                } else {
+                                    // Fallback to direct processing
+                                    this.onAudioReceived(message.data);
+                                    await this.playAudio(message.data);
+                                }
+                            } catch (error) {
+                                console.error('Error processing audio message:', error);
+                                // Fallback to direct processing
+                                this.onAudioReceived(message.data);
+                                await this.playAudio(message.data);
+                            }
                         }
                         else if (message.mime_type === 'text/plain') {
-                            // Handle receiving text from server with role support
-                            const role = message.role || 'model'; // Default to 'model' if no role specified
-                            this.onTextReceived(message.data, role);
+                            // Process text through queue system
+                            try {
+                                if (this.queueManager) {
+                                    await this.queueManager.receive('text', message.data, {
+                                        role: message.role || 'model',
+                                        contentType: 'text/plain',
+                                        timestamp: Date.now()
+                                    });
+                                } else {
+                                    // Fallback to direct processing
+                                    const role = message.role || 'model';
+                                    this.onTextReceived(message.data, role);
+                                }
+                            } catch (error) {
+                                console.error('Error processing text message:', error);
+                                // Fallback to direct processing
+                                const role = message.role || 'model';
+                                this.onTextReceived(message.data, role);
+                            }
+                        }
+                        else if (message.mime_type === 'image/jpeg') {
+                            // Process video through queue system (if needed for future features)
+                            try {
+                                if (this.queueManager) {
+                                    await this.queueManager.receive('video', message.data, {
+                                        contentType: 'image/jpeg',
+                                        mode: message.mode || 'unknown',
+                                        timestamp: Date.now()
+                                    });
+                                } else {
+                                    // Fallback - video processing not critical for current features
+                                    console.log('Video message received but queue unavailable');
+                                }
+                            } catch (error) {
+                                console.error('Error processing video message:', error);
+                                // Video processing failures are non-critical
+                            }
                         }
                         else if (message.turn_complete) {
                             // Model is done speaking
@@ -171,34 +425,57 @@ class AudioClient {
 
     // Initialize the audio context and recorder using AudioWorklet
     async initializeAudio() {
+        // Prevent concurrent initialization
+        if (this.isInitializingAudio) {
+            console.log('Audio initialization already in progress, waiting...');
+            // Wait for current initialization to complete
+            while (this.isInitializingAudio) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return this.recorder !== null;
+        }
+        
+        this.isInitializingAudio = true;
+        
         try {
+            console.log('Requesting microphone access...');
             // Request microphone access
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('Microphone access granted');
 
             // Reuse existing audio context if available or create a new one
             if (!this.audioContext || this.audioContext.state === 'closed') {
                 console.log("Creating new audio context for recording with AudioWorklet");
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 16000 // Match the sample rate expected by server
+                    sampleRate: (CONFIG && CONFIG.audio && CONFIG.audio.sampleRate) || 22000 // Use configured sample rate or default
                 });
+                console.log('AudioContext created with sample rate:', this.audioContext.sampleRate);
 
                 // Track this context for cleanup with LRU management
                 this.trackAudioContext(this.audioContext);
 
-                // Load the AudioWorklet module with fallback
+                // Load the AudioWorklet module
                 try {
-                    await this.audioContext.audioWorklet.addModule('/static/live/audio-processor.js');
+                    console.log('Loading AudioWorklet module...');
+                    const workletUrl = `${window.location.origin}/static/live/audio-processor.js`;
+                    console.log('Worklet URL:', workletUrl);
+                    await this.audioContext.audioWorklet.addModule(workletUrl);
+                    console.log('AudioWorklet module loaded successfully');
                 } catch (workletError) {
-                    console.warn('AudioWorklet not supported, this would fallback to ScriptProcessor in production:', workletError);
+                    console.warn('AudioWorklet failed to load:', workletError);
                     throw new Error('AudioWorklet initialization failed: ' + workletError.message);
                 }
             }
 
             // Create MediaStreamSource
+            console.log('Creating MediaStreamSource...');
             const source = this.audioContext.createMediaStreamSource(stream);
+            console.log('MediaStreamSource created');
 
             // Create AudioWorkletNode
+            console.log('Creating AudioWorkletNode...');
             const workletNode = new AudioWorkletNode(this.audioContext, 'audio-processor-worklet');
+            console.log('AudioWorkletNode created');
 
             // Handle messages from the worklet with error handling
             workletNode.port.onmessage = (event) => {
@@ -220,10 +497,24 @@ class AudioClient {
                         const int16Array = new Int16Array(data.buffer);
                         const hasSignificantAudio = this._detectAudioActivity(int16Array);
 
-                        this.ws.send(JSON.stringify({
-                            mime_type: 'audio/pcm',
-                            data: base64Audio
-                        }));
+                        // For now, bypass queue system for audio to avoid overflow issues
+                        // Direct WebSocket send for better real-time performance
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            try {
+                                this.ws.send(JSON.stringify({
+                                    mime_type: 'audio/pcm',
+                                    data: base64Audio
+                                }));
+                                this.messagesSent.audio = (this.messagesSent.audio || 0) + 1;
+                                
+                                // Log occasionally to show we're sending
+                                if (this.messagesSent.audio % 50 === 0) {
+                                    console.log(`📤 AUDIO DIRECT: Sent ${this.messagesSent.audio} audio messages`);
+                                }
+                            } catch (error) {
+                                console.error('Direct audio WebSocket send failed:', error);
+                            }
+                        }
 
                         // Trigger callback with audio activity status
                         this.onAudioSent(hasSignificantAudio);
@@ -249,17 +540,26 @@ class AudioClient {
             console.error('Error initializing audio:', error);
             this.onError(error);
             return false;
+        } finally {
+            this.isInitializingAudio = false;
         }
     }
 
     // Start recording audio
     async startRecording() {
+        console.log('AudioClient.startRecording() called');
+        
         if (!this.recorder) {
+            console.log('No recorder found, initializing audio...');
             const initialized = await this.initializeAudio();
-            if (!initialized) return false;
+            if (!initialized) {
+                console.error('Failed to initialize audio');
+                return false;
+            }
         }
 
         if (!this.isConnected) {
+            console.log('Not connected, attempting to connect...');
             try {
                 await this.connect();
             } catch (error) {
@@ -272,9 +572,14 @@ class AudioClient {
 
         // Start recording in the worklet
         if (this.recorder.workletNode) {
+            console.log('Sending start-recording message to worklet');
             this.recorder.workletNode.port.postMessage({ type: 'start-recording' });
+        } else {
+            console.error('No worklet node available for recording');
+            return false;
         }
 
+        console.log('Recording started successfully');
         return true;
     }
 
@@ -297,7 +602,7 @@ class AudioClient {
             // Create an audio context if needed
             if (!this.audioContext || this.audioContext.state === 'closed') {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 24000 // Match the sample rate received from server
+                    sampleRate: (CONFIG && CONFIG.audio && CONFIG.audio.sampleRate) || 22000 // Use configured sample rate or default
                 });
 
                 // Track this context for cleanup
@@ -578,5 +883,44 @@ class AudioClient {
 
         const rms = Math.sqrt(sumSquares / audioData.length);
         return rms > threshold;
+    }
+
+    /**
+     * Get queue status for monitoring
+     */
+    getQueueStatus() {
+        return this.queueManager ? this.queueManager.getStatus() : null;
+    }
+
+    /**
+     * Enable or disable queue system
+     */
+    setQueueEnabled(enabled) {
+        if (this.queueManager) {
+            this.queueManager.updateConfig({ enabled });
+        }
+    }
+
+    /**
+     * Cleanup queue manager resources
+     */
+    _cleanupQueueManager() {
+        if (this.queueManager) {
+            this.queueManager.destroy();
+            this.queueManager = null;
+        }
+    }
+
+    /**
+     * Get message transmission statistics
+     */
+    getTransmissionStats() {
+        return {
+            messagesSent: { ...this.messagesSent },
+            isConnected: this.isConnected,
+            isRecording: this.isRecording,
+            wsReadyState: this.ws ? this.ws.readyState : 'null',
+            queueStatus: this.getQueueStatus()
+        };
     }
 }

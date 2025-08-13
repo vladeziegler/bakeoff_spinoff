@@ -2,7 +2,9 @@
  * Multimodal client for handling webcam/screen video and audio streaming to Gemini Live API
  */
 
-class MultimodalClient extends AudioClient {
+import { AudioClient } from './audio-client.js';
+
+export class MultimodalClient extends AudioClient {
     constructor(serverUrl = 'ws://localhost:') {
         super(serverUrl);
 
@@ -23,18 +25,22 @@ class MultimodalClient extends AudioClient {
 
     // Initialize webcam
     async initializeWebcam(videoElement) {
+        console.log('initializeWebcam called with videoElement:', !!videoElement);
+        
         if (!videoElement) {
             console.error('Video element is required');
             return false;
         }
 
         // First, clean up any existing streams
+        console.log('Stopping any existing video streams...');
         this.stopVideo();
 
         this.videoElement = videoElement;
         this.videoMode = 'webcam';
 
         try {
+            console.log('Requesting camera access...');
             // Request camera access
             this.videoStream = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -42,6 +48,7 @@ class MultimodalClient extends AudioClient {
                     height: { ideal: 480 }
                 }
             });
+            console.log('Camera access granted, stream:', this.videoStream);
 
             // Set video element source
             this.videoElement.srcObject = this.videoStream;
@@ -58,18 +65,22 @@ class MultimodalClient extends AudioClient {
 
     // Initialize screen sharing
     async initializeScreenShare(videoElement) {
+        console.log('initializeScreenShare called with videoElement:', !!videoElement);
+        
         if (!videoElement) {
             console.error('Video element is required');
             return false;
         }
 
         // First, clean up any existing streams
+        console.log('Stopping any existing video streams...');
         this.stopVideo();
 
         this.videoElement = videoElement;
         this.videoMode = 'screen';
 
         try {
+            console.log('Requesting screen share access...');
             // Request screen sharing access
             this.videoStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
@@ -77,6 +88,7 @@ class MultimodalClient extends AudioClient {
                 },
                 audio: false
             });
+            console.log('Screen share access granted, stream:', this.videoStream);
 
             // Keep reference to screen track for cleanup
             this.screenTrack = this.videoStream.getVideoTracks()[0];
@@ -153,8 +165,35 @@ class MultimodalClient extends AudioClient {
                     mode: this.videoMode || 'webcam'
                 };
                 
-                // Uncomment for debugging: console.log(`📸 Sending video frame: ${base64Data.length} bytes, mode: ${this.videoMode}`);
-                this.ws.send(JSON.stringify(message));
+                // Send video through queue system
+                try {
+                    if (this.queueManager) {
+                        this.queueManager.send('video', message, {
+                            urgent: false,
+                            batchable: false,
+                            compressible: true
+                        }).catch(error => {
+                            console.error('Error queuing video, falling back to direct send:', error);
+                            // Fallback to direct WebSocket send
+                            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                try {
+                                    this.ws.send(JSON.stringify(message));
+                                } catch (wsError) {
+                                    console.error('Fallback video WebSocket send failed:', wsError);
+                                }
+                            }
+                        });
+                    } else {
+                        // Fallback to direct WebSocket send
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            this.ws.send(JSON.stringify(message));
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error processing video frame:', error);
+                }
+                
+                // Uncomment for debugging: console.log(`📸 Queued video frame: ${base64Data.length} bytes, mode: ${this.videoMode}`);
             } catch (error) {
                 console.error('Error capturing video frame:', error);
             }
