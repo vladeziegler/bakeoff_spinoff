@@ -102,6 +102,7 @@ export class AppController {
     setupClientCallbacks() {
         let currentResponseText = '';
         let isFirstChunk = true;
+        let lastRole = null; // Track the role of the last message
 
         this.client.onReady = () => {
             console.log('Client ready');
@@ -116,15 +117,21 @@ export class AppController {
             // Don't change mic button state for incoming audio from model
         };
 
-        this.client.onTextReceived = (text) => {
+        this.client.onTextReceived = (text, role) => {
             if (text && text.trim()) {
                 this.uiManager.removePlaceholderUserMessage();
 
-                if (isFirstChunk) {
+                // Map role to sender for UI consistency
+                const sender = role === 'user' ? 'user' : 'assistant';
+
+                // If this is the first chunk or role has changed, create a new message
+                if (isFirstChunk || lastRole !== role) {
                     currentResponseText = text;
-                    this.uiManager.addMessage(text, "assistant");
+                    this.uiManager.addMessage(text, sender, role);
                     isFirstChunk = false;
+                    lastRole = role;
                 } else {
+                    // Same role, append to existing message
                     currentResponseText += ' ' + text.trim();
                     this.uiManager.updateLastMessage(currentResponseText);
                 }
@@ -136,6 +143,7 @@ export class AppController {
             this.uiManager.showAudioIndicator(false);
             currentResponseText = '';
             isFirstChunk = true;
+            lastRole = null; // Reset role tracking
             
             if (this.client.ws && this.client.ws.readyState !== WebSocket.OPEN) {
                 console.log('WebSocket not open, reconnecting...');
@@ -155,6 +163,7 @@ export class AppController {
             this.uiManager.addMessage("Sorry, I encountered an error. Please try again.", "assistant");
             currentResponseText = ''; 
             isFirstChunk = true;
+            lastRole = null; // Reset role tracking
             
             if (!this.client.isConnected || (this.client.ws && this.client.ws.readyState !== WebSocket.OPEN)) {
                 console.log('Connection lost due to error, attempting to reconnect...');
@@ -170,6 +179,7 @@ export class AppController {
             this.client.interrupt();
             currentResponseText = ''; 
             isFirstChunk = true;
+            lastRole = null; // Reset role tracking
         };
         
         // Handle audio activity detection for mic button styling

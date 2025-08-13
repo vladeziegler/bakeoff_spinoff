@@ -3,7 +3,7 @@
  */
 
 class AudioClient {
-    constructor(serverUrl = 'ws://localhost:8765') {
+    constructor(serverUrl = 'ws://localhost:8882') {
         this.serverUrl = serverUrl;
         this.ws = null;
         this.recorder = null;
@@ -118,8 +118,9 @@ class AudioClient {
                             await this.playAudio(audioData);
                         }
                         else if (message.mime_type === 'text/plain') {
-                            // Handle receiving text from server
-                            this.onTextReceived(message.data);
+                            // Handle receiving text from server with role support
+                            const role = message.role || 'model'; // Default to 'model' if no role specified
+                            this.onTextReceived(message.data, role);
                         }
                         else if (message.turn_complete) {
                             // Model is done speaking
@@ -203,13 +204,13 @@ class AudioClient {
             workletNode.port.onmessage = (event) => {
                 try {
                     const { type, data, error } = event.data;
-                    
+
                     if (type === 'error') {
                         console.error('AudioWorklet error:', error);
                         this.onError(new Error('AudioWorklet: ' + error));
                         return;
                     }
-                    
+
                     if (type === 'audio-data' && this.isConnected && this.isRecording) {
                         // Convert Int16Array to Uint8Array for transmission
                         const audioBuffer = new Uint8Array(data.buffer);
@@ -218,12 +219,12 @@ class AudioClient {
                         // Check if there's significant audio activity
                         const int16Array = new Int16Array(data.buffer);
                         const hasSignificantAudio = this._detectAudioActivity(int16Array);
-                        
+
                         this.ws.send(JSON.stringify({
                             mime_type: 'audio/pcm',
                             data: base64Audio
                         }));
-                        
+
                         // Trigger callback with audio activity status
                         this.onAudioSent(hasSignificantAudio);
                     }
@@ -268,19 +269,19 @@ class AudioClient {
         }
 
         this.isRecording = true;
-        
+
         // Start recording in the worklet
         if (this.recorder.workletNode) {
             this.recorder.workletNode.port.postMessage({ type: 'start-recording' });
         }
-        
+
         return true;
     }
 
     // Stop recording audio
     stopRecording() {
         this.isRecording = false;
-        
+
         // Stop recording in the worklet
         if (this.recorder && this.recorder.workletNode) {
             this.recorder.workletNode.port.postMessage({ type: 'stop-recording' });
@@ -489,7 +490,7 @@ class AudioClient {
         }
         return bytes.buffer;
     }
-    
+
     /**
      * Initialize audio context tracking with LRU cleanup
      */
@@ -499,14 +500,14 @@ class AudioClient {
             window.audioContextManager = {
                 contexts: [],
                 maxContexts: 5,
-                
+
                 add(context) {
                     // Remove context if already tracked
                     this.remove(context);
-                    
+
                     // Add to front of list
                     this.contexts.unshift(context);
-                    
+
                     // Cleanup old contexts if over limit
                     while (this.contexts.length > this.maxContexts) {
                         const oldContext = this.contexts.pop();
@@ -519,14 +520,14 @@ class AudioClient {
                         }
                     }
                 },
-                
+
                 remove(context) {
                     const index = this.contexts.indexOf(context);
                     if (index > -1) {
                         this.contexts.splice(index, 1);
                     }
                 },
-                
+
                 cleanup() {
                     this.contexts.forEach(ctx => {
                         try {
@@ -542,7 +543,7 @@ class AudioClient {
             };
         }
     }
-    
+
     /**
      * Track audio context with LRU management
      */
@@ -551,7 +552,7 @@ class AudioClient {
             window.audioContextManager.add(context);
         }
     }
-    
+
     /**
      * Remove audio context from tracking
      */
@@ -560,7 +561,7 @@ class AudioClient {
             window.audioContextManager.remove(context);
         }
     }
-    
+
     /**
      * Detect if there's significant audio activity in the buffer
      * @param {Int16Array} audioData - The audio data to analyze
@@ -569,12 +570,12 @@ class AudioClient {
     _detectAudioActivity(audioData) {
         const threshold = 500; // Adjust this value to change sensitivity
         let sumSquares = 0;
-        
+
         // Calculate RMS (Root Mean Square) for volume detection
         for (let i = 0; i < audioData.length; i++) {
             sumSquares += audioData[i] * audioData[i];
         }
-        
+
         const rms = Math.sqrt(sumSquares / audioData.length);
         return rms > threshold;
     }

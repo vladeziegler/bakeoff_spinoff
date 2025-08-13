@@ -48,7 +48,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 from google.adk.agents.run_config import StreamingMode
-from my_agent.agent import root_agent
+from agents.my_agent.agent import root_agent
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
@@ -141,9 +141,6 @@ APP_NAME = "ADK Streaming example"
 shutdown_signal = asyncio.Event()
 
 
-# Session management functions removed - now handled by ADK SessionService
-
-
 async def start_agent_session(user_id, force_new_session=False):
     """Starts a multimodal agent session with audio, video, and text support"""
 
@@ -156,10 +153,9 @@ async def start_agent_session(user_id, force_new_session=False):
     # Ensure only one active session per user by cleaning up existing sessions
     try:
         sessions_response = await runner.session_service.list_sessions(
-            app_name=APP_NAME,
-            user_id=user_id
+            app_name=APP_NAME, user_id=user_id
         )
-        
+
         # If forcing new session or multiple sessions exist, clean up all existing sessions
         if force_new_session or len(sessions_response.sessions) > 1:
             for existing_session in sessions_response.sessions:
@@ -167,29 +163,29 @@ async def start_agent_session(user_id, force_new_session=False):
                     await runner.session_service.delete_session(
                         app_name=APP_NAME,
                         user_id=user_id,
-                        session_id=existing_session.id
+                        session_id=existing_session.id,
                     )
-                    logger.info(f"Deleted existing session {existing_session.id} for user {user_id}")
+                    logger.info(
+                        f"Deleted existing session {existing_session.id} for user {user_id}"
+                    )
                 except Exception as e:
                     logger.warning(f"Error deleting session {existing_session.id}: {e}")
-            
+
             # Create a fresh session
             session = await runner.session_service.create_session(
                 app_name=APP_NAME,
                 user_id=user_id,
             )
             logger.info(f"Created new session {session.id} for user {user_id}")
-            
+
         elif len(sessions_response.sessions) == 1:
             # Use the single existing session
             session_id = sessions_response.sessions[0].id
             session = await runner.session_service.get_session(
-                app_name=APP_NAME,
-                user_id=user_id,
-                session_id=session_id
+                app_name=APP_NAME, user_id=user_id, session_id=session_id
             )
             logger.info(f"Reusing existing session {session_id} for user {user_id}")
-            
+
         else:
             # No existing sessions, create a new one
             session = await runner.session_service.create_session(
@@ -197,7 +193,7 @@ async def start_agent_session(user_id, force_new_session=False):
                 user_id=user_id,
             )
             logger.info(f"Created new session {session.id} for user {user_id}")
-            
+
     except Exception as e:
         logger.warning(f"Error managing sessions for user {user_id}: {e}")
         # Fallback: create a new session
@@ -214,6 +210,7 @@ async def start_agent_session(user_id, force_new_session=False):
     speech_config = SpeechConfig(voice_config=voice_config)
     run_config = RunConfig(
         streaming_mode=StreamingMode.BIDI,
+        response_modalities=["AUDIO"],  # AUDIO or TEXT
         speech_config=speech_config,
         enable_affective_dialog=True,
         proactivity={
@@ -298,10 +295,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     # Check for new_session query parameter
     query_params = websocket.query_params
     force_new_session = query_params.get("new_session") == "true"
-    
+
     # Use ADK session management
     user_id_str = str(user_id)
-    runner, session, run_config = await start_agent_session(user_id_str, force_new_session)
+    runner, session, run_config = await start_agent_session(
+        user_id_str, force_new_session
+    )
 
     # For each new connection, create a new queue and start a new live run.
     live_request_queue = LiveRequestQueue()
@@ -385,6 +384,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             part: Part = (
                 event.content and event.content.parts and event.content.parts[0]
             )
+
+            role = event.content and event.content.role
+
             if not part:
                 continue
 
@@ -401,8 +403,19 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     await websocket.send_text(json.dumps(message))
                     continue
 
-            if part.text and event.partial:
-                message = {"mime_type": "text/plain", "data": part.text}
+            if part.text and event.partial and role == "model":
+                message = {
+                    "mime_type": "text/plain",
+                    "data": part.text,
+                    "role": role,
+                }
+                await websocket.send_text(json.dumps(message))
+            elif part.text and role == "user":
+                message = {
+                    "mime_type": "text/plain",
+                    "data": part.text,
+                    "role": role,
+                }
                 await websocket.send_text(json.dumps(message))
 
     try:

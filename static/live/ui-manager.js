@@ -82,9 +82,9 @@ export class UIManager {
     /**
      * Add message to transcript via state manager
      */
-    addMessage(text, sender) {
+    addMessage(text, sender, role = null) {
         const isPlaceholder = text === "..." && sender === "user";
-        this.stateManager.addTranscriptMessage(text, sender, isPlaceholder);
+        this.stateManager.addTranscriptMessage(text, sender, isPlaceholder, role);
     }
     
     /**
@@ -110,12 +110,15 @@ export class UIManager {
             const messageElement = document.createElement('div');
             let bgColor, textColor;
 
-            if (message.sender === 'user') {
-                bgColor = 'bg-gray-200';
-                textColor = 'text-gray-800';
+            // Use role for styling if available, otherwise fall back to sender
+            const displayRole = message.role || message.sender;
+            
+            if (displayRole === 'user') {
+                bgColor = 'bg-blue-100';
+                textColor = 'text-blue-900';
             } else {
-                bgColor = 'bg-gray-100';
-                textColor = 'text-gray-700';
+                bgColor = 'bg-green-100';
+                textColor = 'text-green-900';
             }
 
             messageElement.className = `p-3 rounded-lg shadow-sm ${bgColor} ${textColor}`;

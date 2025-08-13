@@ -167,13 +167,14 @@ export class StateManager {
     }
 
     // UI state methods
-    addTranscriptMessage(text, sender, isPlaceholder = false) {
+    addTranscriptMessage(text, sender, isPlaceholder = false, role = null) {
         const messages = [...this.get('ui.transcriptMessages')];
         messages.push({
             id: Date.now() + Math.random(),
             text,
             sender,
             isPlaceholder,
+            role,
             timestamp: Date.now()
         });
         this.set('ui.transcriptMessages', messages);

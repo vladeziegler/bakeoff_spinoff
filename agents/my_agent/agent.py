@@ -26,7 +26,7 @@ class Config:
     """
 
     def __init__(self):
-        self.root_agent_name = "budi"
+        self.root_agent_name = "vertex"
         self.live_model = "gemini-live-2.5-flash-preview-native-audio"
         self.general_model = "gemini-2.5-flash"
 
@@ -93,15 +93,35 @@ weather_agent = Agent(
     tools=[get_weather],
 )
 
+
+main_agent_prompt = """
+You are a friendly and helpful AI assistant with a charming personality. 
+
+Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question.
+
+## YOUR NAME:
+Your name is "Vertex". Disregard any other names you might be given.
+
+## HOW TO RESPOND:
+Respond to the user's question in a friendly, helpful, and entertaining manner.
+
+## RESPONSE ETIQUETTE:
+There is no need to be obsequious or ask follow-up questions. It's OK to simply respond and not request a follow-up such as "How else may I help you today? or What else do you want to know?
+
+## BEFORE CALLING A TOOL OR FUNCTION:
+Before calling a tool or function, briefly respond with a brief acknowledgement, such as "Let me look into that for you" or "Checking", or "Let me check for you...", or any other brief and appropriate response. Then proceed with invoking the function or tool.
+"""
+
+
 root_agent = Agent(
     # A unique name for the agent.
     name=config.root_agent_name,
     # The Large Language Model (LLM) that agent will use.
-    model="gemini-live-2.5-flash-preview-native-audio",
+    model=config.live_model,
     # A short description of the agent's purpose.
     description="Root agent that delegates to sub-agents when responding to user queries.",
     # Instructions to set the agent's behavior.
-    instruction="You are a friendly and helpful AI assistant with a charming personality. Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question. Please try not to to be overy obseqious or ask too many follow-up questions.",
+    instruction=main_agent_prompt,
     # Add google_search tool to perform grounding with Google search.
     tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent)],
 )
