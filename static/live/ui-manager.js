@@ -23,6 +23,7 @@ export class UIManager {
         this.audioIndicator = document.getElementById('audio-indicator');
         this.volumeSlider = document.getElementById('volume-slider');
         this.volumeDisplay = document.getElementById('volume-display');
+        this.userIdInput = document.getElementById('userIdInput');
 
         // Subscribe to state changes
         this.subscriptions = [];
@@ -67,6 +68,13 @@ export class UIManager {
         this.subscriptions.push(
             this.stateManager.subscribe('ui.audioIndicatorVisible', (visible) => {
                 this.updateAudioIndicatorFromState(visible);
+            })
+        );
+
+        // Subscribe to user ID changes
+        this.subscriptions.push(
+            this.stateManager.subscribe('session.userId', (userId) => {
+                this.setUserIdInputValue(userId);
             })
         );
     }
@@ -286,6 +294,15 @@ export class UIManager {
     }
 
     /**
+     * Set user ID input value programmatically
+     */
+    setUserIdInputValue(userId) {
+        if (this.userIdInput && userId) {
+            this.userIdInput.value = userId;
+        }
+    }
+
+    /**
      * Set up event listeners for UI elements
      */
     setupEventListeners(callbacks) {
@@ -328,6 +345,13 @@ export class UIManager {
                 callbacks.onVolumeChange(volume / 100); // Convert to 0.0-1.0 range
             });
             // Debug: console.log('Volume slider event listener added');
+        }
+
+        // User ID input
+        if (this.userIdInput && callbacks.onUserIdChange) {
+            this.userIdInput.addEventListener('change', (event) => {
+                callbacks.onUserIdChange(event.target.value);
+            });
         }
     }
 

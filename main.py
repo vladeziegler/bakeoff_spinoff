@@ -156,6 +156,7 @@ async def start_agent_session(user_id, force_new_session=False):
         sessions_response = await runner.session_service.list_sessions(
             app_name=APP_NAME, user_id=user_id
         )
+        session = None
 
         # If forcing new session or multiple sessions exist, clean up all existing sessions
         if force_new_session or len(sessions_response.sessions) > 1:
@@ -204,6 +205,7 @@ async def start_agent_session(user_id, force_new_session=False):
         )
         logger.info(f"Created fallback session {session.id} for user {user_id}")
 
+    session.state["user:ID"] = user_id
     # Configure multimodal session with audio, video, and text support
     voice_config = VoiceConfig(
         prebuilt_voice_config=PrebuiltVoiceConfigDict(voice_name="Aoede")
