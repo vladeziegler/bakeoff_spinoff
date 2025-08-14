@@ -49,7 +49,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from starlette.websockets import WebSocketDisconnect
 from google.adk.agents.run_config import StreamingMode
-from agents.live_api_agent.agent import root_agent
+from agents.banking_agent.agent import root_agent
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 

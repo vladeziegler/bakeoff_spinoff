@@ -13,97 +13,30 @@
 # limitations under the License.
 
 from google.adk.agents import Agent
-from google.adk.tools import google_search, AgentTool  # Import the tool
-from google.adk.agents.remote_a2a_agent import AGENT_CARD_WELL_KNOWN_PATH
-from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
+from google.adk.tools import AgentTool
+# from google.adk.agents.remote_a_agent import AGENT_CARD_WELL_KNOWN_PATH
+# from google.adk.agents.remote_a_agent import RemoteA2aAgent
 import logging
+from .sub_agents.agent import handling_agent
+
 
 logger = logging.getLogger(__name__)
 
 
-class Config:
-    """
-    Configuration class for the agent.
-    This class is used to store configuration settings for the agent.
-    """
+# class Config:   
+#     """
+#     Configuration class for the agent.
+#     This class is used to store configuration settings for the agent.
+#     """
 
-    def __init__(self):
-        self.root_agent_name = "vertex"
-        self.live_model_native = "gemini-live-2.5-flash-preview-native-audio"
-        self.live_model_standard = "gemini-live-2.5-flash"
-        self.general_model = "gemini-2.5-flash"
-
-
-config = Config()
+#     def __init__(self):
+#         self.root_agent_name = "vertex"
+#         self.live_model_native = "gemini-live-2.5-flash-preview-native-audio"
+#         self.live_model_standard = "gemini-live-2.5-flash"
+#         self.general_model = "gemini-2.5-pro"
 
 
-def get_weather(city: str, state: str) -> dict:
-    """
-    Returns a randomly selected weather forecast for a US city. Only US cities are supported.
-
-    Args:
-        city: The name of the city
-        state: The US state abbreviation
-
-    Returns:
-        A dictionary containing weather information
-    """
-    import random
-
-    weather_conditions = [
-        "Sunny",
-        "Partly Cloudy",
-        "Cloudy",
-        "Rainy",
-        "Thunderstorms",
-        "Snowy",
-        "Windy",
-        "Foggy",
-    ]
-    temperatures = range(20, 105)
-    humidity_levels = range(10, 100)
-    wind_speeds = range(0, 30)
-
-    weather = {
-        "location": f"{city}, {state}",
-        "condition": random.choice(weather_conditions),
-        "temperature": random.choice(temperatures),
-        "humidity": random.choice(humidity_levels),
-        "wind_speed": random.choice(wind_speeds),
-    }
-
-    logger.info(f"Weather for {city}, {state}: {weather}")
-
-    return weather
-
-
-q_and_a_agent = Agent(
-    # A unique name for the agent.
-    name="q_and_a",
-    model=config.general_model,
-    instruction="You can answer questions about various topics. If you don't know the answer, you can use the google_search tool to find information.",
-    description="Agent to answer questions and perform web searches using Google Search.",
-    # Add google_search tool to perform grounding with Google search.
-    tools=[google_search],
-)
-
-weather_agent = Agent(
-    # A unique name for the agent.
-    name="weather",
-    model=config.general_model,
-    instruction="Get the weather for the user's requested city and state",
-    description="Agent to get the weather",
-    tools=[get_weather],
-)
-
-
-remote_agent = RemoteA2aAgent(
-    name="cymbal_banking_agent",
-    description=(
-        "Helpful assistant that can roll dice and check if numbers are prime."
-    ),
-    agent_card=f"https://agent.ai-agent-bakeoff.com/.well-known/agent-card.json",
-)
+# config = Config()
 
 main_agent_prompt = """
 # YOUR PURPOSE:
@@ -111,8 +44,14 @@ You are a friendly and helpful AI assistant with a charming personality.
 
 Your goal is to answer the user's question as accurately as possible, and to be as entertaining as possible. Delegate to the available sub-agents to help you answer the user's question.
 
+**Subagents guidelines**
+You can call handling_agent if you need to gather financial data about user. 
+In order to access this financial data, you need to ask the user his user_id.
+You can then pass this user_id to the handling_agent to gather the financial data.
+Otherwise, you can call the remote_agent to fetch the financial data.
+
 ## YOUR NAME:
-Your name is "Vertex". Disregard any other names you might be given.
+Your name is "Financial Concierge". Disregard any other names you might be given.
 
 ## HOW TO RESPOND:
 Respond to the user's question in a friendly, helpful, and entertaining manner.
@@ -129,16 +68,39 @@ The user's timezone is PDT, ensure you convert any date/time values to PDT.
 """
 
 
+# remote_agent = RemoteA2aAgent(
+#     name="cymbal_banking_agent",
+#     description=(
+#         "Helpful assistant that can roll dice and check if numbers are prime."
+#     ),
+#     agent_card=f"https://agent.ai-agent-bakeoff.com/.well-known/agent-card.json",
+# )
+
+
 root_agent = Agent(
     # A unique name for the agent.
-    name=config.root_agent_name,
+    name="financial_concierge",
     # The Large Language Model (LLM) that agent will use.
-    model=config.general_model,
+    model="gemini-2.5-pro",
     # A short description of the agent's purpose.
-    description="Root agent that delegates to sub-agents when responding to user queries.",
+    description="""Root agent that delegates to sub-agents when responding to user queries.""",
     # Instructions to set the agent's behavior.
-    instruction=main_agent_prompt,
-    sub_agents=[remote_agent],
+    instruction="""
+    You are a financial concierge. Your primary role is to assist users with their financial questions.
+
+    **Step 1: Obtain User ID**
+    Before proceeding with any financial inquiry, you must first ask the user for their user_id.
+
+    **Step 2: Delegate to the Handling Agent**
+    Once you have the user_id, you will delegate the user's request to the 'handling_agent'. The 'handling_agent' is responsible for all financial data retrieval and calculations. You should pass the user's request and the user_id to the 'handling_agent'.
+
+    **Example Flow:**
+    - **User:** "What is my current account balance?"
+    - **You:** "Of course, I can help with that. What is your user_id?"
+    - **User:** "It's 12345."
+    - **You:** *Calls the 'handling_agent' with the request "What is my current account balance?" and user_id "12345".*
+    """,
+    sub_agents=[handling_agent]
     # Add google_search tool to perform grounding with Google search.
     # tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent), AgentTool(remote_agent)],
 )
