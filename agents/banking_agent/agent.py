@@ -98,11 +98,11 @@ weather_agent = Agent(
 
 
 remote_agent = RemoteA2aAgent(
-    name="hello_world_agent",
+    name="cymbal_banking_agent",
     description=(
         "Helpful assistant that can roll dice and check if numbers are prime."
     ),
-    agent_card=f"http://localhost:8001/{AGENT_CARD_WELL_KNOWN_PATH}",
+    agent_card=f"https://agent.ai-agent-bakeoff.com/.well-known/agent-card.json",
 )
 
 main_agent_prompt = """
@@ -138,6 +138,7 @@ root_agent = Agent(
     description="Root agent that delegates to sub-agents when responding to user queries.",
     # Instructions to set the agent's behavior.
     instruction=main_agent_prompt,
+    sub_agents=[remote_agent],
     # Add google_search tool to perform grounding with Google search.
-    tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent), AgentTool(remote_agent)],
+    # tools=[AgentTool(q_and_a_agent), AgentTool(weather_agent), AgentTool(remote_agent)],
 )
