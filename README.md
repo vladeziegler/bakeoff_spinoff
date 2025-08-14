@@ -4,12 +4,12 @@ A multimodal real-time streaming application built on Google's Agent Development
 
 ## Features
 
-- <� **Real-time Audio Streaming** - Bidirectional audio communication with the AI agent
-- <� **Video Streaming** - Webcam and screen sharing capabilities  
-- =� **Text Chat** - Real-time text-based conversation
+- < **Real-time Audio Streaming** - Bidirectional audio communication with the AI agent
+- < **Video Streaming** - Webcam and screen sharing capabilities  
+- = **Text Chat** - Real-time text-based conversation
 - = **Message Queuing** - Advanced priority-based message handling with overflow protection
-- =� **Performance Monitoring** - Real-time queue health and transmission statistics
-- =� **Comprehensive Debugging** - Built-in tools for troubleshooting audio and connection issues
+- = **Performance Monitoring** - Real-time queue health and transmission statistics
+- = **Comprehensive Debugging** - Built-in tools for troubleshooting audio and connection issues
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ A multimodal real-time streaming application built on Google's Agent Development
 
 ## Debugging Tools
 
-The application includes comprehensive debugging tools accessible via the browser console (F12 � Console).
+The application includes comprehensive debugging tools accessible via the browser console (F12  Console).
 
 ### = Quick Diagnostics
 
@@ -48,7 +48,7 @@ monitorTransmission(30)
 // Reports message rates and transmission activity
 ```
 
-### <� Audio Debugging
+### < Audio Debugging
 
 #### Volume Control
 ```javascript
@@ -62,25 +62,25 @@ setPlaybackVolume(0.3)  // 30% volume
 
 The console automatically logs audio-related issues:
 
-- **Sample Rate Mismatch**: `<� Audio sample rates - Context: 48000Hz, Server: 24000Hz`
-- **Network Gaps**: `<� Audio gap detected: 348ms (packet #17)`
-- **Adaptive Buffering**: `<� Adaptive buffering: increased threshold to 275ms due to network gaps`
-- **Buffer Management**: `<� Starting playback with 320ms buffered (threshold: 250ms)`
-- **Overflow Protection**: `<� Audio buffer too full (1600ms), dropping packet to prevent delay`
-- **Transmission Count**: `=� AUDIO DIRECT: Sent 50 audio messages`
+- **Sample Rate Mismatch**: `< Audio sample rates - Context: 48000Hz, Server: 24000Hz`
+- **Network Gaps**: `< Audio gap detected: 348ms (packet #17)`
+- **Adaptive Buffering**: `< Adaptive buffering: increased threshold to 275ms due to network gaps`
+- **Buffer Management**: `< Starting playback with 320ms buffered (threshold: 250ms)`
+- **Overflow Protection**: `< Audio buffer too full (1600ms), dropping packet to prevent delay`
+- **Transmission Count**: `= AUDIO DIRECT: Sent 50 audio messages`
 
 #### Common Audio Problems
 
 | Problem | Console Message | Solution |
 |---------|----------------|----------|
-| **Slow/Fast Audio** | `� Sample rate mismatch!` | Sample rates don't match - this is normal and handled automatically |
-| **Audio Gaps** | `<� Audio gap detected: XYZms` | Network delays - system auto-adapts buffer size |
-| **Audio Delays** | `<� Audio buffer too full` | Poor network - system drops packets to maintain real-time |
+| **Slow/Fast Audio** | ` Sample rate mismatch!` | Sample rates don't match - this is normal and handled automatically |
+| **Audio Gaps** | `< Audio gap detected: XYZms` | Network delays - system auto-adapts buffer size |
+| **Audio Delays** | `< Audio buffer too full` | Poor network - system drops packets to maintain real-time |
 | **Overlapping Audio** | Multiple scheduling messages | Fixed - single audio processing path |
 | **Too Loud/Quiet** | No specific message | Use `setPlaybackVolume(0.5)` to adjust |
 | **No Audio** | `L No audio messages transmitted` | Check microphone permissions and connection |
 
-### =� Transmission Statistics
+### = Transmission Statistics
 
 Use `debugTransmission()` to get detailed statistics:
 
@@ -132,7 +132,7 @@ queueStatus: {
 ```javascript
 checkTransmission()
 ```
-- Look for: `= Not connected to server` or `<� Not recording audio`
+- Look for: `= Not connected to server` or `< Not recording audio`
 - Solution: Check browser permissions, refresh page
 
 #### 2. **Audio Quality Issues**
@@ -191,12 +191,11 @@ Message queues are optimized for real-time performance:
 
 ### Volume and Audio Processing
 
-The application includes several audio enhancements:
+The application includes several audio enhancements for clear playback:
 
-- **Volume Control**: Default 70% with soft limiting
-- **Fade Transitions**: 256-sample fades to prevent clicks
-- **Peak Normalization**: Automatic level adjustment
-- **Soft Clipping**: Prevents harsh distortion at �0.95
+- **Gain Control**: All incoming audio is adjusted to 70% of its original volume by default to ensure a comfortable listening level. This can be changed with the UI volume slider.
+- **Soft Clipping**: Prevents harsh digital distortion by gently compressing audio signals that exceed 95% of the maximum volume.
+- **Click Prevention**: A micro-fade is applied to the beginning and end of each audio chunk to prevent audible "clicks" during seamless playback.
 
 ## Development
 
@@ -206,16 +205,32 @@ Debug functions are defined in `/static/live/debug-monitor.js` and automatically
 
 ### Audio Processing Pipeline
 
-```
-Microphone � AudioWorklet � Base64 Encoding � WebSocket � Server
-Server � WebSocket � Base64 Decoding � Continuous Buffer � AudioContext Scheduling � Speakers
-```
+The application employs a sophisticated, real-time audio pipeline designed for low latency and resilience to network instability.
+
+#### 🎤 Outbound Audio (Client to Server)
+
+1.  **Capture:** Audio is captured from the microphone at the browser's native sample rate.
+2.  **AudioWorklet Processing (`audio-processor.js`):** The raw audio stream is immediately passed to a dedicated `AudioWorklet` thread. This prevents audio processing from blocking the main UI thread.
+3.  **Resampling & Formatting:** Inside the worklet, the audio is down-sampled to the 16kHz mono format required by the Live API and converted to 16-bit PCM samples.
+4.  **Transmission (`audio-client.js`):** The 16-bit PCM audio chunks are Base64 encoded and sent over the WebSocket connection. For optimal latency, outbound audio currently bypasses the message queue system and is sent directly.
+
+#### 🎧 Inbound Audio (Server to Client)
+
+This part of the pipeline is engineered to handle network jitter and provide smooth playback.
+
+1.  **Reception (`audio-client.js`):** The client receives 24kHz audio chunks from the server, encoded in Base64.
+2.  **Gap Detection:** Upon receiving a packet, the client measures the time since the last packet arrived. If a significant delay ("gap") is detected, it signals that the network is unstable.
+3.  **Adaptive Buffering:** Based on the detected network gaps, the client dynamically adjusts its buffer size (`adaptiveThreshold`). A more unstable network results in a larger buffer to prevent stuttering, at the cost of slightly higher latency.
+4.  **Decoding & Buffering:** The Base64 data is decoded, and the audio samples are placed into a continuous playback buffer.
+5.  **Gain Adjustment:** Before being buffered, the audio signal's volume is adjusted. By default, it's set to **70%** of the original volume to provide comfortable listening levels and prevent clipping. This can be further adjusted with the UI volume slider.
+6.  **Scheduled Playback:** A high-precision scheduling loop (`scheduleNextChunk`) pulls audio from the buffer. It uses the browser's `AudioContext` clock to schedule playback of small audio chunks back-to-back, ensuring no audible gaps or clicks between them.
+7.  **Buffer Safety:** If the network is too slow and the buffer runs empty (an "underrun"), the scheduler will pause playback until the buffer has been refilled to a safe level. This is the primary cause of audible "choppiness" and is a direct result of network instability. The console will log a "Buffer running low" message when this occurs.
 
 ### Queue System Architecture
 
 ```
-Message � Priority Queue � Rate Limiting � WebSocket Send
-WebSocket Receive � Processing Queue � Application Handler
+Message  Priority Queue  Rate Limiting  WebSocket Send
+WebSocket Receive  Processing Queue  Application Handler
 ```
 
 ## Troubleshooting Guide
@@ -247,9 +262,9 @@ WebSocket Receive � Processing Queue � Application Handler
 | Icon | Message Type | Example | Meaning |
 |------|-------------|---------|---------|
 | = | Connection | `WebSocket connection established` | Successful server connection |
-| =� | Transmission | `AUDIO DIRECT: Sent 50 audio messages` | Outbound message counts |
-| <� | Audio | `Audio gap detected: 120ms` | Audio timing issues |
-| � | Warning | `Sample rate mismatch!` | Configuration warnings |
+| = | Transmission | `AUDIO DIRECT: Sent 50 audio messages` | Outbound message counts |
+| < | Audio | `Audio gap detected: 120ms` | Audio timing issues |
+|  | Warning | `Sample rate mismatch!` | Configuration warnings |
 | L | Error | `Failed to initialize audio` | Critical errors |
 |  | Success | `Transmitting: 89 audio messages sent` | Successful operations |
 

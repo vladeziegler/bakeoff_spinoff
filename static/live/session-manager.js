@@ -30,10 +30,31 @@ export class SessionManager {
     getOrCreateUserId() {
         let userId = localStorage.getItem('userId');
         if (!userId) {
-            userId = Math.random().toString(36).substring(2, 15);
+            userId = 'user-001';
             localStorage.setItem('userId', userId);
         }
         return userId;
+    }
+
+    /**
+     * Update the user ID and trigger a new session
+     * @param {string} newUserId 
+     */
+    setUserId(newUserId) {
+        if (!newUserId || newUserId === this.userId) {
+            return; // No change
+        }
+        console.log(`User ID changed from ${this.userId} to ${newUserId}`);
+        this.userId = newUserId;
+        localStorage.setItem('userId', newUserId);
+
+        // Update UI
+        if (this.footerUserId) {
+            this.footerUserId.textContent = this.userId;
+        }
+        
+        // The rest of the logic is handled by startNewSession
+        this.startNewSession();
     }
 
     /**
@@ -123,13 +144,6 @@ export class SessionManager {
         // Update state manager
         if (this.stateManager) {
             this.stateManager.setSessionInfo(this.userId, null); // Clear session ID
-        }
-        
-        // Force new session by adding query parameter to WebSocket URL
-        if (this.client) {
-            const baseUrl = this.client.serverUrl.split('?')[0]; // Remove existing query params
-            const newWsUrl = `${baseUrl}?new_session=true`;
-            this.client.serverUrl = newWsUrl;
         }
         
         // Trigger session restart event

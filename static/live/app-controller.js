@@ -99,7 +99,8 @@ export class AppController {
             onScreenClick: () => this.handleScreenClick(),
             // End button removed - mic button handles start/stop
             onScreenShareEnded: () => this.handleScreenShareEnded(),
-            onVolumeChange: (volume) => this.handleVolumeChange(volume)
+            onVolumeChange: (volume) => this.handleVolumeChange(volume),
+            onUserIdChange: (newUserId) => this.handleUserIdChange(newUserId)
         });
     }
 
@@ -366,6 +367,13 @@ export class AppController {
     }
 
     /**
+     * Handle user ID change from UI
+     */
+    handleUserIdChange(newUserId) {
+        this.sessionManager.setUserId(newUserId);
+    }
+
+    /**
      * Handle new session request
      */
     handleNewSessionRequest() {
@@ -377,6 +385,9 @@ export class AppController {
         this.uiManager.clearTranscript();
         this.uiManager.addMessage("Starting new session...", "assistant");
         
+        // Update the client's URL before reconnecting
+        this.client.serverUrl = this.sessionManager.getWebSocketUrl();
+
         // Close existing connection and reconnect
         this.client.close();
         this.connectToServer();
