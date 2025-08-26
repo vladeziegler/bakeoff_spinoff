@@ -17,6 +17,7 @@ os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
+from google.adk.artifacts import InMemoryArtifactService
 from google.genai.types import Content, Part
 from agents.banking_agent.agent import root_agent
 
@@ -42,11 +43,15 @@ app.mount("/static", StaticFiles(directory=static_files_path), name="static")
 # 1. Create the session service first.
 session_service = InMemorySessionService()
 
-# 2. Create the base Runner, providing the agent and the session service.
+# 2. Create the artifact service for handling binary data like images.
+artifact_service = InMemoryArtifactService()
+
+# 3. Create the base Runner, providing the agent, session service, and artifact service.
 runner = Runner(
     agent=root_agent,
     app_name="banking_agent",
     session_service=session_service,
+    artifact_service=artifact_service,
 )
 
 @app.get("/apps/{app_name}/users/{user_id}/sessions")
@@ -143,7 +148,58 @@ async def run_agent(
 
 @app.get("/")
 async def read_root():
-    return {"message": "ADK Backend Server is running."}
+    return {"message": "ADK Backend Server is running with Artifact Support."}
+
+@app.get("/artifacts/list")
+async def list_artifacts():
+    """
+    List available artifacts (for debugging purposes)
+    """
+    try:
+        # This would be implementation-specific for InMemoryArtifactService
+        # For now, just return a status message
+        return {
+            "success": True,
+            "message": "Artifacts are stored in memory. Check agent interactions to generate artifacts.",
+            "note": "Artifacts are created automatically when agents generate visualizations."
+        }
+    except Exception as e:
+        logger.error(f"Error listing artifacts: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/artifacts/{artifact_name}")
+async def get_artifact(artifact_name: str):
+    """
+    Retrieve a saved artifact by name
+    """
+    try:
+        # Load artifact from the artifact service
+        artifact_part = artifact_service.load_artifact(artifact_name)
+        
+        if artifact_part and hasattr(artifact_part, 'inline_data'):
+            # Extract the base64 encoded data
+            image_data = artifact_part.inline_data.data
+            mime_type = artifact_part.inline_data.mime_type or 'image/png'
+            
+            # Return as base64 data URL that can be used directly in HTML
+            data_url = f"data:{mime_type};base64,{image_data}"
+            
+            return {
+                "success": True,
+                "artifact_name": artifact_name,
+                "mime_type": mime_type,
+                "data_url": data_url,
+                "message": f"Artifact '{artifact_name}' retrieved successfully"
+            }
+        else:
+            return {
+                "success": False, 
+                "message": f"Artifact '{artifact_name}' not found"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error retrieving artifact '{artifact_name}': {e}")
+        return {"success": False, "error": str(e)}
 
 @app.post("/api/generate-chart")
 async def generate_chart(request: Request):

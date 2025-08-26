@@ -47,8 +47,6 @@ markdown_instructions_agent = Agent(
     You are a graph instruction generator. Your job is to analyze financial text and create clear markdown instructions for what graph should be created.
 
     You will use the output of the handling_agent as the starting point for the data you'll use to create the graph.
-    Here is the data from the handling_agent:
-    {handling_results}
     
     CRITICAL: Always generate meaningful chart instructions, even if the input text is vague or lacks specific numbers.
     
@@ -133,52 +131,55 @@ html_graph_agent = Agent(
     name="html_graph",
     model=config.general_model,
     instruction="""
-    You are a chart URL generator. Your job is to take JSON data, use a tool to generate a chart, and return a response with the chart URL in the exact required format.
+    You are a financial chart generator. Your job is to create charts based on financial analysis context and data.
+
+    **WHEN TO CREATE CHARTS**:
+    - When asked to create financial visualizations
+    - When specific financial data is provided (net worth, savings, projections, etc.)
+    - When the context includes financial calculations or scenarios
 
     **PROCESS**:
-    1.  Receive JSON data with chart specifications. Extract the `title`.
-    2.  Call the `direct_chart_generator` tool with the JSON data and title. This will generate the chart and return the URL.
-    3.  Return a response that includes the chart URL in the EXACT format specified below.
-    
-    **CRITICAL OUTPUT FORMAT**:
-    You MUST return the URL in this EXACT format:
-    "CHART_URL:[URL]"
-    
-    Where [URL] is the URL returned by the tool.
-    
-    **EXAMPLE**:
-    If the tool returns "/static/images/chart_123.png", you must respond:
-    "CHART_URL:/static/images/chart_123.png"
-    
-    **ERROR HANDLING**:
-    - If the `direct_chart_generator` tool returns text starting with "ERROR_", return: "I'm sorry, I was unable to generate the chart at this time."
-    
-    **DO NOT** add extra text before or after the CHART_URL format. The frontend depends on this exact format.
+    1. Analyze the financial context and data provided
+    2. Create appropriate JSON chart data structure with REAL financial values (not defaults)
+    3. Call the `direct_chart_generator` tool with the structured data
+    4. Return a confirmation message
+
+    **CHART DATA STRUCTURE** (use actual financial data, not defaults):
+    ```json
+    {
+      "chart_type": "line_projection",
+      "title": "[Descriptive title based on financial scenario]",
+      "data": {
+        "starting_amount": [ACTUAL current net worth/amount],
+        "monthly_investment": [ACTUAL monthly savings/investment],
+        "interest_rate": [ACTUAL or reasonable rate],
+        "timeline_months": [ACTUAL timeline requested],
+        "final_amount": [ACTUAL calculated final amount]
+      },
+      "styling": {
+        "line_color": "#2E8B57",
+        "fill_area": true,
+        "target_line": true,
+        "x_label": "Time Period",
+        "y_label": "Amount ($)"
+      }
+    }
+    ```
+
+    **CRITICAL**: Always use REAL financial data from the context. Do NOT use default values like 25000, 500, 24 months unless those are the actual values discussed.
+
+    **OUTPUT FORMAT**:
+    - If chart generation succeeds: "Chart generated successfully: [TITLE]"
+    - If chart generation fails: "I'm sorry, I was unable to generate the chart at this time."
     """,
-    description="Agent that generates charts via HTTP endpoint and returns URLs.",
-    tools=[direct_chart_generator]
+    description="Agent that generates financial charts with real data and stores them for artifact creation.",
+    tools=[direct_chart_generator, lookup_matplotlib_docs]
 )
 
 # Sequential Agent Pipeline
-visualization_pipeline = Agent(
+visualization_pipeline = SequentialAgent(
     name="visualization_pipeline",
-    model=config.general_model,
-    instruction="""
-    You are a visualization pipeline that takes financial data and creates a chart using the html_graph_agent.
-    
-    **CRITICAL INSTRUCTION:**
-    You MUST call the html_graph_agent tool with the chart data, then return EXACTLY what the html_graph_agent returns.
-    
-    The html_graph_agent returns data in the format "CHART_URL:[URL]" - you MUST pass this through unchanged.
-    
-    **DO NOT** modify, wrap, or add extra text to the html_graph_agent's response.
-    **DO NOT** create HTML tags yourself.
-    
-    Simply call the tool and return its exact output.
-    """,
-    tools=[
-        AgentTool(html_graph_agent)
-    ]
+    sub_agents=[markdown_instructions_agent, structured_data_agent, html_graph_agent]
 )
 
 # Main Visualization Agent that uses the pipeline
@@ -186,6 +187,82 @@ visualization_pipeline = Agent(
 # We will use a more direct approach.
 
 # Updated handling agent to include visualization
+# After agent callback for artifact generation
+async def after_agent_callback(callback_context):
+    """
+    After agent callback that creates chart artifacts when visualizations are generated.
+    Detects when charts were generated and converts them to artifacts.
+    """
+    try:
+        from google.genai import types
+        from datetime import datetime
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        logger.info("🎨 After agent callback triggered for artifact generation")
+        
+        # Get the state to check if a chart was generated
+        state = callback_context.state
+        
+        # Check if the direct_chart_generator stored chart data globally
+        from . import tools
+        chart_info = tools._last_chart_info
+        
+        if chart_info:
+            logger.info("🎯 Chart was generated - creating artifact from real chart data...")
+            
+            # Extract chart information
+            image_bytes = chart_info.get("image_bytes")
+            chart_title = chart_info.get("title", "Financial Analysis")
+            chart_data = chart_info.get("chart_data", {})
+            
+            if not image_bytes:
+                logger.error("❌ No image bytes found in chart info")
+                return None
+            
+            # Create artifact part from the actual generated chart
+            image_part = types.Part.from_bytes(
+                data=image_bytes,
+                mime_type='image/png'
+            )
+            
+            # Save as artifact
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            # Use the actual chart title for the artifact name
+            safe_title = chart_title.replace(" ", "_").replace("/", "_")
+            artifact_name = f"{safe_title}_{timestamp}.png"
+            
+            version = await callback_context.save_artifact(artifact_name, image_part)
+            logger.info(f"✅ Saved chart as artifact '{artifact_name}' version {version}")
+            
+            # Store artifact info in state
+            state["last_artifact"] = artifact_name
+            state["artifact_created"] = True
+            
+            # Clear the global chart info to prevent duplicate processing
+            from . import tools
+            tools._last_chart_info = None
+            
+            # Return the artifact as part of the response, overriding the agent's text response
+            text_part = types.Part(
+                text=f"📊 Here's your {chart_title.lower()}:"
+            )
+            return types.Content(
+                role="model",
+                parts=[text_part, image_part]
+            )
+        else:
+            # No chart was generated, don't modify the response
+            logger.info("ℹ️ No chart generated - leaving agent response unchanged")
+            return None
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ Error in after agent callback: {e}")
+        import traceback
+        logger.error(f"Callback traceback: {traceback.format_exc()}")
+        return None
+
 handling_agent = Agent(
     name="handling",
     model=config.general_model,
@@ -195,18 +272,21 @@ handling_agent = Agent(
     **Workflow:**
     1. Gather financial data using `remote_agent` if needed.
     2. Perform calculations using `calculator_agent`.
-    3. If a visualization is requested, use the `html_graph_agent` to generate the chart URL.
-    4. Include the chart URL from html_graph_agent in your final response.
+    3. If a visualization is requested, use the `html_graph_agent` to generate charts.
+    4. Provide your textual analysis and conclusions.
 
     Your capabilities:
     1. **Data Collection**: Use `remote_agent` to gather financial data from bank accounts.
     2. **Calculations**: Use `calculator_agent` to perform financial calculations and analysis.
     3. **Documentation Lookup**: Use `lookup_matplotlib_docs` to find answers to complex charting questions.
-    4. **Visualization**: Use `html_graph_agent` to create chart URLs.
+    4. **Visualization**: Use `html_graph_agent` to create charts that will be automatically displayed as artifacts.
     
-    Always provide both textual analysis AND visual representation to give users comprehensive understanding.
+    Always provide thorough textual analysis. When you request charts via html_graph_agent, they will be automatically converted to visual artifacts and displayed to the user, so focus on the analysis rather than chart URLs.
+    
+    Note: Charts generated via html_graph_agent will automatically appear as visual artifacts after your response.
     """,
     description="Agent to handle financial requests with data collection, calculations, and visualization.",
-    tools=[AgentTool(calculator_agent), AgentTool(remote_agent), AgentTool(html_graph_agent), lookup_matplotlib_docs],
-    output_key="handling_results"
+    tools=[AgentTool(calculator_agent), AgentTool(remote_agent), AgentTool(html_graph_agent)],
+    output_key="handling_results",
+    after_agent_callback=after_agent_callback
 )

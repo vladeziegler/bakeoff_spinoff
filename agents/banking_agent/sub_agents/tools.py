@@ -2,6 +2,7 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 from io import BytesIO
+import io
 import base64
 from typing import Dict, Any
 import os
@@ -86,53 +87,124 @@ def lookup_matplotlib_docs(query: str) -> str:
 
 def direct_chart_generator(chart_data: str, title: str = "Financial Analysis") -> str:
     """
-    Chart generator that calls the chart microservice.
-    Makes HTTP request to chart service running on port 8882.
+    Chart generator that creates matplotlib charts and stores chart data for artifact callback.
+    Uses a global variable to store chart data since tool context access is complex.
     Args:
         chart_data: JSON string or dict of chart specifications.
         title: Title for the chart.
     Returns:
-        Chart URL path or error message.
+        Success/error message (chart data stored globally for callback).
     """
-    import requests
     import json as json_lib
+    import matplotlib.pyplot as plt
+    import io
     
-    print(f"🎨 Requesting chart from service: {title}")
+    print(f"🎨 Generating chart directly: {title}")
     print(f"📊 Chart data: {chart_data}")
+    print(f"📊 Chart data type: {type(chart_data)}")
     
     try:
-        # Prepare request payload
-        payload = {
-            "chart_data": chart_data,
-            "title": title
-        }
-        
-        # Make request to chart service
-        chart_service_url = "http://localhost:8882/generate-chart"
-        response = requests.post(
-            chart_service_url,
-            json=payload,
-            timeout=30,
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            if result.get("success"):
-                image_url = result.get("url")
-                print(f"✅ Chart generated successfully: {image_url}")
-                return image_url
-            else:
-                error_msg = result.get("error", "Unknown error")
-                print(f"❌ Chart service error: {error_msg}")
-                return f"ERROR_SERVICE_FAILED: {error_msg}"
+        # Parse chart data
+        if isinstance(chart_data, str):
+            data = json_lib.loads(chart_data)
         else:
-            print(f"❌ Chart service HTTP error: {response.status_code}")
-            return f"ERROR_HTTP_FAILED: {response.status_code} {response.text}"
+            data = chart_data
+            
+        # Generate chart using existing render function
+        print(f"🔍 Parsed data before chart generation: {data}")
+        chart_result = render_chart_and_get_bytes(data, title)
+        
+        if chart_result.get("success"):
+            image_bytes = chart_result.get("image_bytes")
+            chart_info = {
+                "image_bytes": image_bytes,
+                "title": title,
+                "chart_data": data,
+                "mime_type": "image/png"
+            }
+            
+            # Store globally for callback to access
+            # This is a simple approach - in production, you'd use proper context management
+            global _last_chart_info
+            _last_chart_info = chart_info
+            print(f"✅ Chart generated and stored globally for artifact creation")
+            
+            return f"Chart '{title}' generated successfully"
+        else:
+            error_msg = chart_result.get("error", "Unknown error")
+            print(f"❌ Chart generation error: {error_msg}")
+            return f"ERROR_CHART_FAILED: {error_msg}"
             
     except Exception as e:
-        print(f"❌ Chart generation request failed: {e}")
-        return f"ERROR_REQUEST_FAILED: {str(e)}"
+        print(f"❌ Chart generation failed: {e}")
+        return f"ERROR_CHART_FAILED: {str(e)}"
+
+# Global variable to store chart info for callback access
+_last_chart_info = None
+
+def render_chart_and_get_bytes(data: dict, title: str = "Financial Analysis") -> dict:
+    """
+    Generate chart and return image bytes instead of saving to file.
+    Args:
+        data: Chart specifications as dict.
+        title: Title for the chart.
+    Returns:
+        Dict with success status, image_bytes if successful, error if failed.
+    """
+    print(f"🎨 Generating chart bytes: {title}")
+    fig = None
+    try:
+        if not isinstance(data, dict): 
+            data = _generate_sample_chart_data()
+        chart_title = _safe_get(data, "title", title)
+        
+        plt.ioff()
+        fig = plt.figure(figsize=(12, 8))
+        plt.clf()
+
+        # Chart creation logic...
+        chart_type = _safe_get(data, "chart_type", "line_projection")
+        chart_data = _safe_get(data, "data", {})
+        styling = _safe_get(data, "styling", {})
+        chart_created = False
+        
+        if chart_type == "line_projection": 
+            chart_created = _create_projection_chart_robust(chart_data, styling)
+        elif chart_type == "spending_pie": 
+            chart_created = _create_pie_chart_robust(chart_data, styling)
+        elif chart_type == "comparison_bar": 
+            chart_created = _create_comparison_chart_robust(chart_data, styling)
+        elif chart_type == "savings_opportunities": 
+            chart_created = _create_savings_chart_robust(chart_data, styling)
+        else: 
+            chart_created = _create_projection_chart_robust(chart_data, styling)
+            
+        if not chart_created: 
+            _create_emergency_fallback_chart()
+        plt.title(chart_title, fontsize=18, fontweight='bold', pad=20)
+        
+        # Convert to bytes instead of saving to file
+        buffer = io.BytesIO()
+        plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
+        buffer.seek(0)
+        image_bytes = buffer.getvalue()
+        
+        print(f"✅ Chart bytes generated successfully: {len(image_bytes)} bytes")
+        return {
+            "success": True,
+            "image_bytes": image_bytes,
+            "title": chart_title
+        }
+        
+    except Exception as e:
+        print(f"❌ Chart bytes generation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        if fig: 
+            plt.close(fig)
 
 def render_chart_and_get_url(data_json: str, title: str = "Financial Analysis") -> str:
     """
@@ -222,10 +294,13 @@ def _extract_chart_data_from_text(text: str) -> Dict[str, Any]:
 def _create_projection_chart_robust(data: Dict[str, Any], styling: Dict[str, Any]) -> bool:
     """Robust version of projection chart creation."""
     try:
+        print(f"🔍 Creating projection chart with data: {data}")
         starting_amount = float(_safe_get(data, "starting_amount", 25000))
         monthly_investment = float(_safe_get(data, "monthly_investment", 500))
         interest_rate = float(_safe_get(data, "interest_rate", 6)) / 100 / 12
         timeline_months = int(_safe_get(data, "timeline_months", 24))
+        
+        print(f"🔍 Chart parameters: start=${starting_amount}, monthly=${monthly_investment}, rate={interest_rate*12*100}%, months={timeline_months}")
         
         if timeline_months <= 0 or timeline_months > 120:
             timeline_months = 24
