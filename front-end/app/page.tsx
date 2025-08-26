@@ -19,14 +19,7 @@ const getInitials = (name: string) => {
   return initials.join('').toUpperCase();
 };
 
-const renderVisualization = (html: string) => {
-  return (
-    <div 
-      className="mt-3 rounded-lg border overflow-hidden slide-in-up"
-      dangerouslySetInnerHTML={{ __html: html }} 
-    />
-  );
-};
+// Legacy visualization function removed - we only use ADK artifacts now
 
 export default function BankingAIChat() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -213,18 +206,32 @@ export default function BankingAIChat() {
                     <p className={`text-sm leading-relaxed ${message.isError ? 'text-red-700' : ''}`}>
                       {message.content}
                     </p>
-                    {/* Use a single render function. Pass the visualization flag. */}
-                    {message.hasVisualization && message.visualizationHtml && renderVisualization(message.visualizationHtml)}
-        {message.hasVisualization && message.chartUrl && (
-          <div className="mt-3 rounded-lg border overflow-hidden slide-in-up">
-            <img 
-              src={message.chartUrl} 
-              alt="Generated Chart" 
-              className="w-full h-auto"
-              style={{ maxWidth: '100%', height: 'auto' }}
-            />
-          </div>
-        )}
+                    {/* Only handle ADK artifacts - no legacy charts */}
+                    {message.hasVisualization && message.artifactImageUrl && (
+                      <div className="mt-3 rounded-lg border overflow-hidden slide-in-up">
+                        <img 
+                          src={message.artifactImageUrl} 
+                          alt="Generated Chart" 
+                          className="w-full h-auto"
+                          style={{ maxWidth: '100%', height: 'auto' }}
+                          onLoad={() => {
+                            console.log('✅ Artifact image loaded successfully');
+                          }}
+                          onError={(e) => {
+                            console.error('❌ Artifact image failed to load');
+                            console.error('URL length:', message.artifactImageUrl?.length);
+                            console.error('URL prefix:', message.artifactImageUrl?.substring(0, 100));
+                            
+                            // If it's a blob URL that failed, revoke it to free memory
+                            if (message.artifactImageUrl?.startsWith('blob:')) {
+                              URL.revokeObjectURL(message.artifactImageUrl);
+                            }
+                            
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
                     <p className="text-xs opacity-70 mt-2">
                       {message.timestamp.toLocaleTimeString([], {
                         hour: "2-digit",

@@ -140,37 +140,105 @@ html_graph_agent = Agent(
 
     **PROCESS**:
     1. Analyze the financial context and data provided
-    2. Create appropriate JSON chart data structure with REAL financial values (not defaults)
-    3. Call the `direct_chart_generator` tool with the structured data
-    4. Return a confirmation message
+    2. Choose the appropriate chart type based on the data
+    3. Create structured JSON data with REAL financial values from the context
+    4. Call the `direct_chart_generator` tool with the structured data
+    5. Return a confirmation message
 
-    **CHART DATA STRUCTURE** (use actual financial data, not defaults):
+    **SUPPORTED CHART TYPES & DATA FORMATS**:
+
+    **1. LINE CHARTS** (for time series, projections, growth over time):
+    Chart type: "line_projection"
+    
+    Format A - Array Data (when you have calculated data points):
     ```json
     {
       "chart_type": "line_projection",
-      "title": "[Descriptive title based on financial scenario]",
+      "title": "[Descriptive title based on scenario]",
       "data": {
-        "starting_amount": [ACTUAL current net worth/amount],
-        "monthly_investment": [ACTUAL monthly savings/investment],
-        "interest_rate": [ACTUAL or reasonable rate],
-        "timeline_months": [ACTUAL timeline requested],
+        "labels": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        "values": [21000, 27050, 33402, 40072, 47076, 54430, 62151, 70259, 78772, 87710, 97096]
+      },
+      "styling": {
+        "line_color": "#2E8B57",
+        "fill_area": true,
+        "x_label": "Years",
+        "y_label": "Net Worth ($)"
+      }
+    }
+    ```
+    
+    Format B - Projection Parameters (when you need to calculate projections):
+    ```json
+    {
+      "chart_type": "line_projection",
+      "title": "[Descriptive title]",
+      "data": {
+        "starting_amount": [ACTUAL current amount],
+        "monthly_investment": [ACTUAL monthly amount],
+        "interest_rate": [ACTUAL rate %],
+        "timeline_months": [ACTUAL months requested],
         "final_amount": [ACTUAL calculated final amount]
       },
       "styling": {
         "line_color": "#2E8B57",
         "fill_area": true,
         "target_line": true,
-        "x_label": "Time Period",
+        "x_label": "Months",
         "y_label": "Amount ($)"
       }
     }
     ```
 
-    **CRITICAL**: Always use REAL financial data from the context. Do NOT use default values like 25000, 500, 24 months unless those are the actual values discussed.
+    **2. PIE CHARTS** (for category breakdowns, spending analysis):
+    Chart type: "spending_pie"
+    ```json
+    {
+      "chart_type": "spending_pie",
+      "title": "[Category breakdown title]",
+      "data": {
+        "categories": {
+          "Housing": [ACTUAL amount],
+          "Food": [ACTUAL amount],
+          "Transport": [ACTUAL amount],
+          "Entertainment": [ACTUAL amount]
+        }
+      },
+      "styling": {
+        "colors": ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"]
+      }
+    }
+    ```
+
+    **3. BAR CHARTS** (for comparisons, savings opportunities):
+    Chart type: "comparison_bar" or "savings_opportunities"
+    ```json
+    {
+      "chart_type": "comparison_bar",
+      "title": "[Comparison title]",
+      "data": {
+        "Budget": [ACTUAL amount],
+        "Actual": [ACTUAL amount],
+        "Target": [ACTUAL amount]
+      },
+      "styling": {
+        "colors": ["#E74C3C", "#27AE60", "#3498DB"],
+        "x_label": "Categories",
+        "y_label": "Amount ($)"
+      }
+    }
+    ```
+
+    **CRITICAL REQUIREMENTS**:
+    1. ALWAYS extract REAL financial values from the conversation context
+    2. NEVER use placeholder values like 25000, 500, 24 unless those are the actual discussed amounts
+    3. If the user mentions specific amounts (like "21k current net worth", "5k annual savings"), use those exact values
+    4. Choose the data format that best fits the available information
+    5. Validate your data has all required fields before calling the tool
 
     **OUTPUT FORMAT**:
-    - If chart generation succeeds: "Chart generated successfully: [TITLE]"
-    - If chart generation fails: "I'm sorry, I was unable to generate the chart at this time."
+    - Success: "Chart generated successfully: [TITLE]"
+    - Failure: "I'm sorry, I was unable to generate the chart due to [specific reason]."
     """,
     description="Agent that generates financial charts with real data and stores them for artifact creation.",
     tools=[direct_chart_generator, lookup_matplotlib_docs]

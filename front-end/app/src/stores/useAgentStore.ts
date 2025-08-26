@@ -10,8 +10,7 @@ interface AgentMessage {
   sender: 'user' | 'agent'
   timestamp: Date
   hasVisualization?: boolean
-  visualizationHtml?: string
-  chartUrl?: string
+  artifactImageUrl?: string  // Only for ADK artifacts
   isError?: boolean
   attachments?: MessageAttachment[]
 }
@@ -193,8 +192,8 @@ interface AgentState {
   isGeminiFormatting: boolean;
 }
 
-// Configuration
-const AGENT_BASE_URL = '/api'; // Using the proxy
+// Configuration for ADK Web Server via Next.js proxy (with increased size limits)
+const AGENT_BASE_URL = '/api'; // Proxy to ADK web server with larger response limits
 const APP_NAME = 'banking_agent'
 const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent'
@@ -272,19 +271,27 @@ export const useAgentStore = create<AgentState>()(
         }
 
         const textParts = parts.filter(p => p.text).map(p => p.text).join(' ');
-        const displayAttachments: MessageAttachment[] = parts
+        const attachmentCandidates = parts
           .map(part => {
-          if (part.inlineData) {
+            if (part.inlineData) {
+              const attachmentType: MessageAttachment['type'] = part.inlineData.mimeType.startsWith('image/') 
+                ? 'image' 
+                : part.inlineData.mimeType.startsWith('video/') 
+                ? 'video'
+                : part.inlineData.mimeType.startsWith('audio/')
+                ? 'audio'
+                : 'file';
               return {
-                type: part.inlineData.mimeType.startsWith('image/') ? 'image' : 'file',
-              name: part.inlineData.displayName || 'attachment',
-              mimeType: part.inlineData.mimeType,
-              data: part.inlineData.data
-              };
+                type: attachmentType,
+                name: part.inlineData.displayName || 'attachment',
+                mimeType: part.inlineData.mimeType,
+                data: part.inlineData.data
+              } as MessageAttachment;
             }
             return null;
           })
           .filter((attachment): attachment is MessageAttachment => attachment !== null);
+        const displayAttachments: MessageAttachment[] = attachmentCandidates;
 
         const userMessage: AgentMessage = {
           id: `user-${uuidv4()}`,
@@ -319,8 +326,13 @@ export const useAgentStore = create<AgentState>()(
             set({ sessionId: currentSessionId });
           }
 
-          const runUrl = `${AGENT_BASE_URL}/apps/${APP_NAME}/users/${userId}/sessions/${currentSessionId}:run`;
-          const runPayload = { newMessage: { parts, role: 'user' } };
+          const runUrl = `${AGENT_BASE_URL}/run`;
+          const runPayload = { 
+            appName: APP_NAME,
+            userId: userId,
+            sessionId: currentSessionId,
+            newMessage: { parts, role: 'user' } 
+          };
 
           console.log('🚀 Sending request to:', runUrl);
           console.log('📤 Request payload:', JSON.stringify(runPayload, null, 2));
@@ -343,11 +355,42 @@ export const useAgentStore = create<AgentState>()(
             const errorBody = await runResponse.text();
             console.error('❌ Error response body:', errorBody);
             throw new Error(`Agent run failed: ${runResponse.status} ${runResponse.statusText} - ${errorBody}`);
-          }
+                    }
 
-          const responseEvents: AgentRunResponseEvent[] = await runResponse.json();
-          console.log('✅ Response events:', responseEvents);
-          get().handleAgentResponse(responseEvents);
+          const responseData = await runResponse.json();
+          console.log('✅ Response data keys:', Object.keys(responseData));
+          
+          // Log inline data if present to debug base64 issues
+          if (Array.isArray(responseData)) {
+            responseData.forEach((event, index) => {
+              if (event.content?.parts) {
+                event.content.parts.forEach((part: any, partIndex: number) => {
+                  if (part.inlineData) {
+                    console.log(`🔍 Event ${index}, Part ${partIndex} has inlineData:`, {
+                      mimeType: part.inlineData.mimeType,
+                      dataLength: part.inlineData.data?.length,
+                      dataPreview: part.inlineData.data?.substring(0, 50)
+                    });
+                  }
+                });
+              }
+            });
+          }
+          
+          // ADK server /run endpoint returns an array of events directly
+          let events: AgentRunResponseEvent[] = [];
+          if (Array.isArray(responseData)) {
+            // Direct array of events from /run endpoint
+            events = responseData;
+            console.log('📊 Processing', events.length, 'events from response array');
+          } else {
+            // Fallback: treat the response as a single event
+            events = [responseData];
+            console.log('📊 Processing single event from response object');
+          }
+          
+          console.log('✅ Processed events:', events);
+          get().handleAgentResponse(events);
 
         } catch (error) {
           const errorMessage = `Agent communication error: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -400,53 +443,148 @@ export const useAgentStore = create<AgentState>()(
   )
 )
 
-// Helper function to process agent responses
+// Helper function to process agent responses - ONLY handles ADK artifacts now
 function processAgentResponse(events: AgentRunResponseEvent[]): AgentMessage {
   console.log('🔄 Processing agent response events:', events);
   
   let finalContent = "I've processed your request.";
-  let chartUrl: string | undefined = undefined;
+  let artifactImageUrl: string | undefined = undefined;
 
-  // Search through all events and parts to find text content
+  // Search through all events and parts to find text content and artifacts
   for (const event of events) {
     console.log('📝 Processing event:', event);
     if (event.content?.parts) {
       for (const part of event.content.parts) {
         console.log('📄 Processing part:', part);
+        
+                        // Handle ONLY ADK artifacts with inlineData
+                if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
+                  // Clean base64 data (remove any whitespace)
+                  let base64Data = part.inlineData.data.replace(/\s/g, '');
+                  
+                  console.log('🔍 Original base64 preview:', base64Data.substring(0, 100));
+                  
+                  // Check if this is Base64URL encoding (contains - or _)
+                  if (base64Data.includes('-') || base64Data.includes('_')) {
+                    console.log('🔧 Converting Base64URL to standard base64...');
+                    
+                    // Convert Base64URL to standard base64
+                    base64Data = base64Data
+                      .replace(/-/g, '+')  // Replace - with +
+                      .replace(/_/g, '/'); // Replace _ with /
+                    
+                    // Add padding if needed
+                    const padding = base64Data.length % 4;
+                    if (padding !== 0) {
+                      base64Data += '='.repeat(4 - padding);
+                    }
+                    
+                    console.log('✅ Base64URL conversion successful');
+                    console.log('🔍 Converted base64 preview:', base64Data.substring(0, 100));
+                  }
+                  
+                  // Handle any remaining URL encoding (% characters)
+                  if (base64Data.includes('%')) {
+                    console.log('🔧 Base64 data appears to be URL-encoded, decoding...');
+                    try {
+                      base64Data = decodeURIComponent(base64Data);
+                      console.log('✅ URL decoding successful');
+                    } catch (urlDecodeError) {
+                      console.error('❌ URL decoding failed:', urlDecodeError);
+                    }
+                  }
+                  
+                  try {
+                    
+                    console.log('🎨 Processing artifact:', part.inlineData.mimeType);
+                    console.log('🎨 Base64 data length:', base64Data.length);
+                    console.log('🎨 Base64 preview (first 100):', base64Data.substring(0, 100));
+                    console.log('🎨 Base64 preview (last 100):', base64Data.substring(base64Data.length - 100));
+                    
+                    // Validate base64 format (after conversion from Base64URL)
+                    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+                    const isValidBase64 = base64Regex.test(base64Data);
+                    console.log('🔍 Is valid standard base64 format:', isValidBase64);
+                    
+                    if (!isValidBase64) {
+                      // Find invalid characters (should be rare after Base64URL conversion)
+                      const invalidChars = base64Data.match(/[^A-Za-z0-9+/=]/g);
+                      console.error('❌ Invalid base64 characters found after conversion:', invalidChars);
+                      
+                      // Show first few invalid characters
+                      if (invalidChars && invalidChars.length > 0) {
+                        console.error('❌ First few invalid chars:', invalidChars.slice(0, 10));
+                        
+                        // Find position of first invalid character
+                        for (let i = 0; i < base64Data.length; i++) {
+                          const char = base64Data[i];
+                          if (!/[A-Za-z0-9+/=]/.test(char)) {
+                            console.error(`❌ First invalid char at position ${i}: '${char}' (code: ${char.charCodeAt(0)})`);
+                            console.error(`❌ Context: ...${base64Data.substring(Math.max(0, i-10), i+10)}...`);
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    
+                    // Check padding
+                    const paddingCount = (base64Data.match(/=/g) || []).length;
+                    const expectedLength = Math.ceil(base64Data.replace(/=/g, '').length / 4) * 4;
+                    console.log('🔍 Padding count:', paddingCount);
+                    console.log('🔍 Current length:', base64Data.length);
+                    console.log('🔍 Expected length with padding:', expectedLength);
+                    
+                    // Try creating blob URL (more reliable than data URLs)
+                    const byteCharacters = atob(base64Data);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                      byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: part.inlineData.mimeType });
+                    artifactImageUrl = URL.createObjectURL(blob);
+                    
+                    console.log('✅ Created blob URL for artifact, size:', byteArray.length, 'bytes');
+                    console.log('✅ Blob URL:', artifactImageUrl);
+                    
+                  } catch (error) {
+                    console.error('❌ Failed to process artifact with blob URL:', error);
+                    console.error('❌ Error details:', {
+                      name: (error as Error).name,
+                      message: (error as Error).message,
+                      stack: (error as Error).stack
+                    });
+                    
+                    // Fallback to data URL
+                    try {
+                      console.log('⚠️ Attempting data URL fallback with cleaned and URL-decoded base64');
+                      
+                      // Use the same cleaned and URL-decoded base64Data from above
+                      artifactImageUrl = `data:${part.inlineData.mimeType};base64,${base64Data}`;
+                      console.log('⚠️ Created data URL (length:', artifactImageUrl.length, ')');
+                      
+                    } catch (fallbackError) {
+                      console.error('❌ Even data URL fallback failed:', fallbackError);
+                    }
+                  }
+                }
+        
+        // Handle text content (no more legacy chart processing)
         if (part.text) {
           console.log('💬 Found text:', part.text);
-          // Check for CHART_URL pattern (handle with or without space after colon)
-          const chartUrlMatch = part.text.match(/CHART_URL:([^\s]+)/);
-          if (chartUrlMatch) {
-            chartUrl = chartUrlMatch[1];
-            console.log('🖼️ Found chart URL:', chartUrl);
-            // Remove the CHART_URL pattern from display text
-            finalContent = part.text.replace(/CHART_URL:[^\s]+/, '').trim();
-          } else {
-            // Fallback: Check for HTML img tag with /static/images/ src
-            const imgTagMatch = part.text.match(/<img[^>]+src="([^"]*\/static\/images\/[^"]+)"[^>]*>/);
-            if (imgTagMatch && !chartUrl) {
-              chartUrl = imgTagMatch[1];
-              console.log('🖼️ Found chart URL in img tag:', chartUrl);
-              // Remove the img tag from display text for cleaner presentation
-              finalContent = part.text.replace(/<img[^>]+src="[^"]*\/static\/images\/[^"]+"[^>]*>/, '').trim();
-            } else if (!chartUrl) {
-              // Use this text if we haven't found a chart URL yet
-              finalContent = part.text;
-            }
-          }
+          finalContent = part.text;
         }
       }
     }
   }
-
-  const result = {
+  
+  const result: AgentMessage = {
     id: `agent-${Date.now()}`,
     content: finalContent,
-    sender: 'agent',
+    sender: 'agent' as const,
     timestamp: new Date(),
-    hasVisualization: !!chartUrl,
-    chartUrl: chartUrl
+    hasVisualization: !!artifactImageUrl,
+    artifactImageUrl: artifactImageUrl
   };
   
   console.log('✨ Final processed message:', result);
