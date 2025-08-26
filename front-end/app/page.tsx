@@ -53,8 +53,18 @@ export default function BankingAIChat() {
   }
 
   useEffect(() => {
-    scrollToBottom()
+    // Scroll after a short delay to ensure content is rendered
+    const timer = setTimeout(scrollToBottom, 50)
+    return () => clearTimeout(timer)
   }, [messages])
+
+  // Also scroll when loading state changes
+  useEffect(() => {
+    if (!isLoading) {
+      const timer = setTimeout(scrollToBottom, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [isLoading])
 
   const handleAuthentication = () => {
     if (userIdInput.trim()) {
@@ -156,8 +166,8 @@ export default function BankingAIChat() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5">
-      <div className="border-b glass-effect sticky top-0 z-10">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5 flex flex-col">
+      <div className="border-b glass-effect sticky top-0 z-10 flex-shrink-0">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-secondary to-accent flex items-center justify-center float pulse-glow">
@@ -175,19 +185,19 @@ export default function BankingAIChat() {
       </div>
 
       {/* Chat Container */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <Card className="h-[calc(100vh-200px)] flex flex-col glass-effect glow">
+      <div className="max-w-4xl mx-auto px-4 py-6 flex-1 flex flex-col">
+        <Card className="flex-1 flex flex-col glass-effect glow min-h-0">
           {/* Messages Area */}
           <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-            <div className="space-y-4">
+            <div className="space-y-4 max-w-full overflow-hidden">
               {messages.map((message, index) => (
                 <div
                   key={message.id}
-                  className={`flex gap-3 slide-in-up ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex gap-3 slide-in-up w-full ${message.sender === "user" ? "justify-end" : "justify-start"}`}
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
                   {message.sender === "agent" && (
-                    <Avatar className={`w-8 h-8 bg-gradient-to-r float ${message.isError ? 'from-red-500 to-red-600' : 'from-secondary to-accent'}`}>
+                    <Avatar className={`w-8 h-8 bg-gradient-to-r float flex-shrink-0 ${message.isError ? 'from-red-500 to-red-600' : 'from-secondary to-accent'}`}>
                       <AvatarFallback className="bg-transparent">
                         {message.isError ? <AlertCircle className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
                       </AvatarFallback>
@@ -195,27 +205,35 @@ export default function BankingAIChat() {
                   )}
 
                   <div
-                    className={`max-w-[70%] rounded-lg px-4 py-3 transition-all duration-300 hover:scale-105 ${
+                    className={`max-w-[calc(100%-3rem-0.75rem)] min-w-0 rounded-lg px-4 py-3 transition-all duration-300 hover:scale-105 ${
                       message.sender === "user"
-                        ? "bg-gradient-to-r from-primary to-secondary text-primary-foreground ml-auto shimmer"
+                        ? "bg-gradient-to-r from-blue-600 to-purple-700 text-white shadow-lg border border-blue-300/30"
                         : message.isError 
                           ? "bg-red-50 border border-red-200 backdrop-blur-sm"
                           : "bg-card/80 border backdrop-blur-sm"
                     }`}
                   >
-                    <p className={`text-sm leading-relaxed ${message.isError ? 'text-red-700' : ''}`}>
+                    <p className={`text-sm leading-relaxed break-words ${
+                      message.isError 
+                        ? 'text-red-700' 
+                        : message.sender === 'user' 
+                          ? 'text-white font-medium' 
+                          : ''
+                    }`}>
                       {message.content}
                     </p>
                     {/* Only handle ADK artifacts - no legacy charts */}
                     {message.hasVisualization && message.artifactImageUrl && (
-                      <div className="mt-3 rounded-lg border overflow-hidden slide-in-up">
+                      <div className="mt-3 rounded-lg border overflow-hidden slide-in-up w-full max-w-full">
                         <img 
                           src={message.artifactImageUrl} 
                           alt="Generated Chart" 
-                          className="w-full h-auto"
-                          style={{ maxWidth: '100%', height: 'auto' }}
+                          className="w-full h-auto object-contain block"
+                          style={{ maxWidth: '100%', maxHeight: '350px', height: 'auto', display: 'block' }}
                           onLoad={() => {
                             console.log('✅ Artifact image loaded successfully');
+                            // Trigger scroll after image loads to ensure proper positioning
+                            setTimeout(scrollToBottom, 100);
                           }}
                           onError={(e) => {
                             console.error('❌ Artifact image failed to load');
@@ -241,7 +259,7 @@ export default function BankingAIChat() {
                   </div>
 
                   {message.sender === "user" && (
-                    <Avatar className="w-8 h-8 bg-gradient-to-r from-accent to-secondary float">
+                    <Avatar className="w-8 h-8 bg-gradient-to-r from-accent to-secondary float flex-shrink-0">
                       <AvatarFallback className="bg-transparent">
                         <User className="w-4 h-4 text-white" />
                       </AvatarFallback>
@@ -251,13 +269,13 @@ export default function BankingAIChat() {
               ))}
 
               {isLoading && (
-                <div className="flex gap-3 justify-start slide-in-up">
-                  <Avatar className="w-8 h-8 bg-gradient-to-r from-secondary to-accent float">
+                <div className="flex gap-3 justify-start slide-in-up w-full">
+                  <Avatar className="w-8 h-8 bg-gradient-to-r from-secondary to-accent float flex-shrink-0">
                     <AvatarFallback className="bg-transparent">
                       <Bot className="w-4 h-4 text-white" />
                     </AvatarFallback>
                   </Avatar>
-                  <div className="bg-card/80 border rounded-lg px-4 py-3 backdrop-blur-sm">
+                  <div className="bg-card/80 border rounded-lg px-4 py-3 backdrop-blur-sm max-w-[calc(100%-3rem-0.75rem)] min-w-0">
                     <div className="flex gap-1">
                       <div className="w-2 h-2 bg-secondary rounded-full animate-bounce" />
                       <div
@@ -275,7 +293,7 @@ export default function BankingAIChat() {
             </div>
           </ScrollArea>
 
-          <div className="px-4 py-2 border-t backdrop-blur-sm">
+          <div className="px-4 py-2 border-t backdrop-blur-sm flex-shrink-0">
             <div className="flex gap-2 mb-3 flex-wrap">
               <Button
                 variant="outline"
@@ -310,7 +328,7 @@ export default function BankingAIChat() {
             </div>
           </div>
 
-          <CardContent className="p-4 pt-0">
+          <CardContent className="p-4 pt-0 flex-shrink-0">
             {/* Selected Files Display */}
             {selectedFiles.length > 0 && (
               <div className="mb-3 p-3 bg-secondary/10 rounded-lg">

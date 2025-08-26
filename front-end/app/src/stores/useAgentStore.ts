@@ -595,8 +595,8 @@ export const useAgentActions = () => {
   const sendMessage = useAgentStore(state => state.sendMessage)
   
   return {
-    requestSpendingAnalysis: () => sendMessage('Show me my spending analysis with a chart'),
-    requestPortfolioBreakdown: () => sendMessage('Display my portfolio breakdown with visualization'),
-    requestBudgetComparison: () => sendMessage('Show budget vs actual comparison chart'),
+    requestSpendingAnalysis: () => sendMessage('Look at transactions for past 30 days, and return pie chart'),
+    requestPortfolioBreakdown: () => sendMessage('Show me history of transactions on a monthly basis in bar chart, each one per month. generate bar chart with results'),
+    requestBudgetComparison: () => sendMessage('Show stacked bars with assets on one side, liabilities on the other'),
   }
 }
