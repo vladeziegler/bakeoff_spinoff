@@ -3,7 +3,7 @@ from google.adk.agents import Agent, SequentialAgent
 from google.adk.code_executors import BuiltInCodeExecutor
 from google.adk.tools import AgentTool
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
-from .tools import render_chart_to_html
+from .tools import direct_chart_generator, lookup_matplotlib_docs
 
 class Config:
     """
@@ -33,7 +33,7 @@ calculator_agent = Agent(
 remote_agent = RemoteA2aAgent(
     name="cymbal_banking_agent",
     description=(
-        "Helpful assistant that can roll dice and check if numbers are prime."
+        "Helpful assistant that can fetch user profile information, personal details, and other user-related data."
     ),
     agent_card=f"https://agent.ai-agent-bakeoff.com/.well-known/agent-card.json",
 )
@@ -42,30 +42,34 @@ remote_agent = RemoteA2aAgent(
 
 markdown_instructions_agent = Agent(
     name="markdown_instructions",
-    model=config.general_model,
+    model="gemini-2.5-pro",
     instruction="""
     You are a graph instruction generator. Your job is to analyze financial text and create clear markdown instructions for what graph should be created.
+
+    You will use the output of the handling_agent as the starting point for the data you'll use to create the graph.
+    Here is the data from the handling_agent:
+    {handling_results}
     
-    You will receive financial analysis text (from coding_results) and must generate markdown instructions that specify:
+    CRITICAL: Always generate meaningful chart instructions, even if the input text is vague or lacks specific numbers.
+    
+    Your output must specify:
     1. **Chart Type**: Line chart, bar chart, pie chart, etc.
     2. **Title**: Clear, descriptive title for the chart
-    3. **Data Points**: All numerical values and their meanings
+    3. **Data Points**: All numerical values and their meanings (use sample data if needed)
     4. **Visual Elements**: Colors, styling preferences, axis labels
     
-    **Example Input**: "Your current net worth is $21,000. Assuming you invest $100 per month for the next 5 years at 5% interest, your net worth will be approximately $27,800.61 in 5 years."
-    
-    **Example Output**:
+    **Default Template** (use when input is unclear):
     ```markdown
     # Graph Instructions
     
-    **Chart Type**: Line Chart - Investment Projection
-    **Title**: "Investment Growth Over 5 Years"
+    **Chart Type**: Line Chart - Financial Projection
+    **Title**: "Financial Analysis Visualization"
     **Data Points**:
-    - Starting Amount: $21,000
-    - Monthly Investment: $100
-    - Interest Rate: 5% annually
+    - Starting Amount: $25,000
+    - Monthly Investment: $500
+    - Interest Rate: 6% annually
     - Timeline: 60 months
-    - Final Amount: $27,800.61
+    - Final Amount: $55,000
     
     **Visual Elements**:
     - X-axis: Months (0-60)
@@ -75,7 +79,7 @@ markdown_instructions_agent = Agent(
     - Add target line at final amount
     ```
     
-    Always create clear, specific instructions that the next agent can easily convert to structured data.
+    IMPORTANT: Always create complete, specific instructions that will result in a meaningful chart, even if using estimated or sample data.
     """,
     description="Agent that converts financial text into markdown graph instructions.",
 )
@@ -84,140 +88,125 @@ structured_data_agent = Agent(
     name="structured_data",
     model=config.general_model,
     instruction="""
-    You are a data structure converter. Your job is to take markdown graph instructions and convert them into structured JSON data.
+    Your job is to take markdown graph instructions and convert them into structured JSON data.
     
-    You will receive markdown instructions and must output a JSON structure with:
-    - chart_type: The type of chart to create
-    - title: Chart title
-    - data: All numerical data points
-    - styling: Visual styling preferences
+    CRITICAL: Always output valid JSON even if the input is incomplete or unclear.
+
+    TOOLS:
+    - lookup_matplotlib_docs: If you're unsure on how to create the chart, missing data, or any other information that relates to creating a chart, use this tool to lookup the matplotlib documentation to get the data for the chart.
     
-    **Example Input**: Markdown instructions about investment projection
+    Your output structure:
+    - chart_type: The type of chart to create (default: "line_projection")
+    - title: Chart title (provide meaningful default if missing)
+    - data: All numerical data points (use sample data if real data missing)
+    - styling: Visual styling preferences (provide defaults)
     
-    **Example Output**:
+    **Sample JSON**:
     ```json
     {
       "chart_type": "line_projection",
-      "title": "Investment Growth Over 5 Years",
+      "title": "Financial Analysis",
       "data": {
-        "starting_amount": 21000,
-        "monthly_investment": 100,
-        "interest_rate": 5,
+        "starting_amount": 25000,
+        "monthly_investment": 500,
+        "interest_rate": 6,
         "timeline_months": 60,
-        "final_amount": 27800.61
+        "final_amount": 55000
       },
       "styling": {
         "line_color": "#2E8B57",
         "fill_area": true,
         "target_line": true,
         "x_label": "Months",
-        "y_label": "Account Balance ($)"
+        "y_label": "Amount ($)"
       }
     }
     ```
     
-    Always output valid JSON that contains all the information needed to create the chart.
+    IMPORTANT: Always return valid, complete JSON that will generate a chart, even if using sample data.
     """,
     description="Agent that converts markdown instructions into structured JSON data.",
+    
 )
 
 html_graph_agent = Agent(
     name="html_graph",
     model=config.general_model,
     instruction="""
-    You are an HTML graph generator. Your job is to take structured JSON data and create a complete HTML visualization.
+    You are a chart URL generator. Your job is to take JSON data, use a tool to generate a chart, and return a response with the chart URL in the exact required format.
+
+    **PROCESS**:
+    1.  Receive JSON data with chart specifications. Extract the `title`.
+    2.  Call the `direct_chart_generator` tool with the JSON data and title. This will generate the chart and return the URL.
+    3.  Return a response that includes the chart URL in the EXACT format specified below.
     
-    You will receive JSON data with chart specifications and must:
-    1. Generate appropriate matplotlib code based on the data structure
-    2. Execute the code to create the chart
-    3. Convert to HTML with professional styling
+    **CRITICAL OUTPUT FORMAT**:
+    You MUST return the URL in this EXACT format:
+    "CHART_URL:[URL]"
     
-    Use the render_chart_to_html tool to handle the matplotlib execution and HTML generation.
+    Where [URL] is the URL returned by the tool.
     
-    **Supported Chart Types**:
-    - line_projection: For financial projections over time
-    - spending_pie: For spending category breakdowns
-    - comparison_bar: For comparing financial options
-    - savings_opportunities: For showing potential savings
+    **EXAMPLE**:
+    If the tool returns "/static/images/chart_123.png", you must respond:
+    "CHART_URL:/static/images/chart_123.png"
     
-    Always create professional, mobile-responsive HTML with the chart in a div with id="graph".
+    **ERROR HANDLING**:
+    - If the `direct_chart_generator` tool returns text starting with "ERROR_", return: "I'm sorry, I was unable to generate the chart at this time."
+    
+    **DO NOT** add extra text before or after the CHART_URL format. The frontend depends on this exact format.
     """,
-    description="Agent that generates HTML charts from structured data.",
-    tools=[render_chart_to_html]
+    description="Agent that generates charts via HTTP endpoint and returns URLs.",
+    tools=[direct_chart_generator]
 )
 
 # Sequential Agent Pipeline
-visualization_pipeline = SequentialAgent(
-    name="VisualizationPipeline",
-    sub_agents=[markdown_instructions_agent, structured_data_agent, html_graph_agent],
-    description="A pipeline that converts financial text into markdown instructions, then structured data, then HTML charts",
+visualization_pipeline = Agent(
+    name="visualization_pipeline",
+    model=config.general_model,
+    instruction="""
+    You are a visualization pipeline that takes financial data and creates a chart using the html_graph_agent.
+    
+    **CRITICAL INSTRUCTION:**
+    You MUST call the html_graph_agent tool with the chart data, then return EXACTLY what the html_graph_agent returns.
+    
+    The html_graph_agent returns data in the format "CHART_URL:[URL]" - you MUST pass this through unchanged.
+    
+    **DO NOT** modify, wrap, or add extra text to the html_graph_agent's response.
+    **DO NOT** create HTML tags yourself.
+    
+    Simply call the tool and return its exact output.
+    """,
+    tools=[
+        AgentTool(html_graph_agent)
+    ]
 )
 
 # Main Visualization Agent that uses the pipeline
-visualisation_agent = Agent(
-    name="visualisation",
-    model=config.general_model,
-    instruction="""
-    You are a visualization coordinator that creates charts from financial analysis results.
-    
-    You will receive financial text (often from coding_results) and use the visualization pipeline to create HTML charts.
-    
-    Your process:
-    1. Take the financial text input
-    2. Use the visualization pipeline to convert it through the 3-step process
-    3. Return the final HTML chart
-    
-    The pipeline will handle:
-    - Converting text to markdown instructions
-    - Converting markdown to structured data
-    - Converting structured data to HTML charts
-    
-    Always aim to create clear, professional visualizations that help users understand their financial situation.
-    """,
-    description="Main visualization agent that coordinates the chart creation pipeline.",
-    tools=[AgentTool(visualization_pipeline)],
-    output_key="visualisation_results"
-)
+# This is now simplified as the pipeline is too complex and fragile.
+# We will use a more direct approach.
 
 # Updated handling agent to include visualization
-
 handling_agent = Agent(
     name="handling",
     model=config.general_model,
     instruction="""
-    You're an agent that collects financial data to perform calculations and create visualizations.
+    You're an agent that collects financial data, performs calculations, and creates visualizations.
 
-    If asked by the user for financial data, you need to call the remote_agent to gather the data.
-    If asked by the user for calculations, you need to call the calculator_agent to perform the calculations.
-    If asked by the user for visualizations, you need to call the visualization_agent to create the visualizations.
-
-    You can also call the visualization_agent to create visualizations from the data that has been returned by the remote_agent.
-
-    You can also call the visualization_agent to create visualizations from the data that has been returned by the calculator_agent.
-    
-    Your capabilities:
-    1. **Data Collection**: Use remote_agent to gather financial data from bank accounts
-    2. **Calculations**: Use calculator_agent to perform financial calculations and analysis
-    3. **Visualizations**: Use visualization_agent to create charts and graphs from analysis results
-    
     **Workflow:**
-    1. First, gather financial data using remote_agent if needed
-    2. Perform calculations using calculator_agent
-    3. If the user wants to see charts or graphs, or if the analysis would benefit from visualization, call visualization_agent
+    1. Gather financial data using `remote_agent` if needed.
+    2. Perform calculations using `calculator_agent`.
+    3. If a visualization is requested, use the `html_graph_agent` to generate the chart URL.
+    4. Include the chart URL from html_graph_agent in your final response.
+
+    Your capabilities:
+    1. **Data Collection**: Use `remote_agent` to gather financial data from bank accounts.
+    2. **Calculations**: Use `calculator_agent` to perform financial calculations and analysis.
+    3. **Documentation Lookup**: Use `lookup_matplotlib_docs` to find answers to complex charting questions.
+    4. **Visualization**: Use `html_graph_agent` to create chart URLs.
     
-    **When to Use Visualization:**
-    - User explicitly asks for charts, graphs, or visual analysis
-    - Analysis involves trends over time (savings growth, spending patterns)
-    - Comparing different financial options (house prices, budget categories)
-    - Showing spending breakdowns or savings opportunities
-    - Any complex financial analysis that would be clearer with visual representation
-    
-    Always provide both textual analysis and visual representation when appropriate to give users the most comprehensive understanding of their financial situation.
+    Always provide both textual analysis AND visual representation to give users comprehensive understanding.
     """,
     description="Agent to handle financial requests with data collection, calculations, and visualization.",
-    tools=[AgentTool(calculator_agent), AgentTool(remote_agent), AgentTool(visualisation_agent)]
+    tools=[AgentTool(calculator_agent), AgentTool(remote_agent), AgentTool(html_graph_agent), lookup_matplotlib_docs],
+    output_key="handling_results"
 )
-
-
-
-

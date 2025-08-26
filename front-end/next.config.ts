@@ -1,7 +1,17 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:8881/:path*', // Proxy API requests
+      },
+      {
+        source: '/static/:path*',
+        destination: 'http://localhost:8881/static/:path*', // Proxy static image requests
+      },
+    ];
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

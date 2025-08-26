@@ -1,261 +1,31 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-import os
-import json
 import asyncio
-import base64
-import warnings
-import time
 import logging
-import traceback
-from collections import OrderedDict
-from contextlib import asynccontextmanager
-import uvicorn
-
-from pathlib import Path
-from dotenv import load_dotenv
-
+import matplotlib
+matplotlib.use('Agg')  # MUST be done before pyplot is imported anywhere
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
-from google.genai.types import (
-    Part,
-    Content,
-    Blob,
-    VoiceConfig,
-    PrebuiltVoiceConfigDict,
-    SpeechConfig,
-    AudioTranscriptionConfig,
-    MediaResolution,
-)
-
-from google.adk.runners import InMemoryRunner
-from google.adk.agents import LiveRequestQueue
-from google.adk.agents.run_config import RunConfig
-
-from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
-from starlette.websockets import WebSocketDisconnect
-from google.adk.agents.run_config import StreamingMode
+import uvicorn
+import os
+
+# --- Vertex AI Configuration ---
+# This MUST be set before any other google modules are imported.
+# It tells the google.genai client to use Vertex AI for authentication.
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
+os.environ["GOOGLE_CLOUD_PROJECT"] = "agent-bake-off"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
+
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai.types import Content, Part
 from agents.banking_agent.agent import root_agent
 
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
-
-
-class NoBlobFilter(logging.Filter):
-    """A custom logging filter to exclude noisy blob messages."""
-
-    def filter(self, record):
-        # Check for the first type of message to exclude
-        if (
-            record.name == "google_adk.google.adk.models.gemini_llm_connection"
-            and record.getMessage().startswith("Sending LLM Blob")
-        ):
-            return False  # Exclude this message
-
-        # Check for the second type of message to exclude
-        if (
-            record.name == "google_adk.google.adk.flows.llm_flows.base_llm_flow"
-            and record.getMessage().startswith("Sending live request")
-        ):
-            return False  # Exclude this message
-
-        # Check for the third type of message to exclude
-        if (
-            record.name == "google_adk.google.adk.models.gemini_llm_connection"
-            and record.getMessage().startswith("Got LLM Live message")
-        ):
-            return False  # Exclude this message
-
-        # If neither of the above conditions are met, allow the message
-        return True
-
-
-def setup_logging():
-    """Set up logging to both console and a timestamped file."""
-    root_logger = logging.getLogger()
-    # If handlers have already been added, do nothing.
-    if root_logger.hasHandlers():
-        return
-
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-    log_filename = log_dir / f"adk-app-{timestamp}.log"
-    root_logger.setLevel(logging.DEBUG)  # Set the lowest level to capture all logs
-
-    # Mute noisy loggers
-    logging.getLogger("websockets.client").setLevel(logging.WARNING)
-    logging.getLogger("google_adk.google.adk.flows.llm_flows.base_llm_flow").setLevel(
-        logging.WARNING
-    )
-
-    # Create a formatter
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Create and add the file handler
-    file_handler = logging.FileHandler(log_filename)
-    file_handler.setLevel(logging.DEBUG)  # Log everything to the file
-    file_handler.setFormatter(formatter)
-    file_handler.addFilter(NoBlobFilter())  # Add our custom filter
-    root_logger.addHandler(file_handler)
-
-    # Create and add the stream handler for the console
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.WARNING)  # Log only warnings and above to console
-    stream_handler.setFormatter(formatter)
-    root_logger.addHandler(stream_handler)
-
-
-# Now, get the logger for this specific module
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+app = FastAPI()
 
-#
-# ADK Streaming
-#
-
-# Load Gemini API Key
-load_dotenv()
-
-APP_NAME = "ADK Streaming example"
-
-
-# Session management - now handled by ADK SessionService
-
-
-# Global event to signal shutdown
-shutdown_signal = asyncio.Event()
-
-
-async def start_agent_session(user_id, force_new_session=False):
-    """Starts a multimodal agent session with audio, video, and text support"""
-
-    # Create a Runner
-    runner = InMemoryRunner(
-        app_name=APP_NAME,
-        agent=root_agent,
-    )
-
-    # Ensure only one active session per user by cleaning up existing sessions
-    try:
-        sessions_response = await runner.session_service.list_sessions(
-            app_name=APP_NAME, user_id=user_id
-        )
-        session = None
-
-        # If forcing new session or multiple sessions exist, clean up all existing sessions
-        if force_new_session or len(sessions_response.sessions) > 1:
-            for existing_session in sessions_response.sessions:
-                try:
-                    await runner.session_service.delete_session(
-                        app_name=APP_NAME,
-                        user_id=user_id,
-                        session_id=existing_session.id,
-                    )
-                    logger.info(
-                        f"Deleted existing session {existing_session.id} for user {user_id}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Error deleting session {existing_session.id}: {e}")
-
-            # Create a fresh session
-            session = await runner.session_service.create_session(
-                app_name=APP_NAME,
-                user_id=user_id,
-            )
-            logger.info(f"Created new session {session.id} for user {user_id}")
-
-        elif len(sessions_response.sessions) == 1:
-            # Use the single existing session
-            session_id = sessions_response.sessions[0].id
-            session = await runner.session_service.get_session(
-                app_name=APP_NAME, user_id=user_id, session_id=session_id
-            )
-            logger.info(f"Reusing existing session {session_id} for user {user_id}")
-
-        else:
-            # No existing sessions, create a new one
-            session = await runner.session_service.create_session(
-                app_name=APP_NAME,
-                user_id=user_id,
-            )
-            logger.info(f"Created new session {session.id} for user {user_id}")
-
-    except Exception as e:
-        logger.warning(f"Error managing sessions for user {user_id}: {e}")
-        # Fallback: create a new session
-        session = await runner.session_service.create_session(
-            app_name=APP_NAME,
-            user_id=user_id,
-        )
-        logger.info(f"Created fallback session {session.id} for user {user_id}")
-
-    session.state["user:ID"] = user_id
-    # Configure multimodal session with audio, video, and text support
-    voice_config = VoiceConfig(
-        prebuilt_voice_config=PrebuiltVoiceConfigDict(voice_name="Aoede")
-    )
-    speech_config = SpeechConfig(voice_config=voice_config)
-    run_config = RunConfig(
-        streaming_mode=StreamingMode.BIDI,
-        response_modalities=["AUDIO"],  # AUDIO or TEXT
-        speech_config=speech_config,
-        enable_affective_dialog=True,
-        proactivity={
-            "proactive_audio": True
-        },  # https://googleapis.github.io/python-genai/genai.html#genai.types.ProactivityConfigDict
-        realtime_input_config={
-            "automaticActivityDetection": {
-                "disabled": False,
-                "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
-                "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
-                "prefixPaddingMs": 20,
-                "silenceDurationMs": 100,
-            },
-            "activityHandling": "NO_INTERRUPTION",
-            "turnCoverage": "TURN_INCLUDES_ALL_INPUT",
-        },
-        output_audio_transcription=AudioTranscriptionConfig(),
-        input_audio_transcription=AudioTranscriptionConfig(),
-    )
-
-    return runner, session, run_config
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """App lifespan context manager."""
-    # Startup
-    setup_logging()
-    logger.info("Application starting up...")
-    yield
-    # Shutdown
-    logger.info("Application shutting down...")
-    shutdown_signal.set()
-    logger.info("Shutdown complete. Sessions managed by ADK.")
-
-
-app = FastAPI(lifespan=lifespan)
-
-
-# Configure CORS
-origins = ["*"]  # Allow all origins for development
-
+origins = ["http://localhost:3000"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -264,188 +34,223 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+static_files_path = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(os.path.join(static_files_path, "images"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_files_path), name="static")
 
-STATIC_DIR = Path("static")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Following the user's provided script:
+# 1. Create the session service first.
+session_service = InMemorySessionService()
 
+# 2. Create the base Runner, providing the agent and the session service.
+runner = Runner(
+    agent=root_agent,
+    app_name="banking_agent",
+    session_service=session_service,
+)
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """Serves the main index.html."""
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-
-
-@app.get("/basic", response_class=HTMLResponse)
-async def basic_chat():
-    """Serves the basic chat html."""
-    return FileResponse(os.path.join(STATIC_DIR, "basic/index.html"))
-
-
-@app.get("/live", response_class=HTMLResponse)
-async def live_chat():
-    """Serves the live multimodal chat html."""
-    return FileResponse(os.path.join(STATIC_DIR, "live/index.html"))
-
-
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    """Client websocket endpoint"""
-
-    # Wait for client connection
-    await websocket.accept()
-    logger.info(f"Client #{user_id} connected for multimodal session")
-
-    # Check for new_session query parameter
-    query_params = websocket.query_params
-    force_new_session = query_params.get("new_session") == "true"
-
-    # Use ADK session management
-    user_id_str = str(user_id)
-    runner, session, run_config = await start_agent_session(
-        user_id_str, force_new_session
-    )
-
-    # For each new connection, create a new queue and start a new live run.
-    live_request_queue = LiveRequestQueue()
-    live_events = runner.run_live(
-        session=session,
-        live_request_queue=live_request_queue,
-        run_config=run_config,
-    )
-
-    # Send session info to the client
-    await websocket.send_text(
-        json.dumps(
-            {
-                "mime_type": "application/json",
-                "event": "session_info",
-                "data": {
-                    "user_id": user_id_str,
-                    "session_id": session.id,
-                },
-            }
+@app.get("/apps/{app_name}/users/{user_id}/sessions")
+async def list_sessions(app_name: str, user_id: str):
+    try:
+        sessions_response = await session_service.list_sessions(
+            app_name=app_name, user_id=user_id
         )
-    )
+        return {"sessions": [s.model_dump() for s in sessions_response.sessions]}
+    except Exception as e:
+        logger.error(f"Error listing sessions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to list sessions")
 
-    async def handle_websocket_messages():
+@app.post("/apps/{app_name}/users/{user_id}/sessions")
+async def create_session(app_name: str, user_id: str):
+    try:
+        session = await session_service.create_session(
+            app_name=app_name, user_id=user_id
+        )
+        logger.info(f"Created new session {session.id} for user {user_id}")
+        return session.model_dump()
+    except Exception as e:
+        logger.error(f"Error creating session: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create session")
+
+@app.post("/apps/{app_name}/users/{user_id}/sessions/{session_id}:run")
+async def run_agent(
+    app_name: str, user_id: str, session_id: str, request: Request
+):
+    try:
+        request_data = await request.json()
+        new_message_dict = request_data.get("newMessage")
+        
+        new_message = None
+        if new_message_dict and new_message_dict.get("parts"):
+            part_objects = [Part(**p) for p in new_message_dict["parts"]]
+            new_message = Content(
+                role=new_message_dict.get("role", "user"),
+                parts=part_objects
+            )
+        
+        response_events = []
         try:
-            while True:
-                try:
-                    message = await websocket.receive_text()
-                    data = json.loads(message)
-                    if data.get("mime_type").startswith("audio/pcm"):
-                        # Decode base64 audio data
-                        audio_bytes = base64.b64decode(data.get("data", ""))
-                        # Put audio in queue for processing
-                        live_request_queue.send_realtime(
-                            Blob(data=audio_bytes, mime_type=data.get("mime_type"))
-                        )
-                    elif data.get("mime_type") == "image/jpeg":
-                        # Decode base64 video frame
-                        video_bytes = base64.b64decode(data.get("data", ""))
-                        # Get video mode metadata if available
-                        video_mode = data.get(
-                            "mode", "webcam"
-                        )  # Default to webcam if not specified
-                        logger.info(f"Processing video frame from {video_mode}")
-                        # Put video frame in queue for processing with metadata
-                        live_request_queue.send_realtime(
-                            Blob(data=video_bytes, mime_type="image/jpeg")
-                        )
-                    elif data.get("mime_type") == "text/plain":
-                        # Handle text messages
-                        live_request_queue.send_content(
-                            Content(
-                                role="user",
-                                parts=[Part.from_text(text=data.get("data"))],
-                            )
-                        )
-                        logger.info(f"Received text: {data.get('data')}")
-                except WebSocketDisconnect:
-                    logger.debug("WebSocket disconnected during message handling")
-                    break
-                except json.JSONDecodeError:
-                    logger.error("Invalid JSON message received")
-                except Exception as e:
-                    logger.error(f"Error processing message: {e}")
-        except WebSocketDisconnect:
-            logger.debug("WebSocket disconnected during message handling")
-        except Exception as e:
-            logger.error(f"Error in message handler: {e}")
-
-    async def receive_and_process_responses():
-        async for event in live_events:
-            if event.turn_complete or event.interrupted:
-                message = {
+            for event in runner.run(
+                user_id=user_id, session_id=session_id, new_message=new_message
+            ):
+                logger.info(f"Processing event: turn_complete={event.turn_complete}")
+                
+                # Manually construct a JSON-safe dictionary to avoid serialization errors
+                # with raw binary data in the event object.
+                event_dict = {
                     "turn_complete": event.turn_complete,
                     "interrupted": event.interrupted,
                 }
-                await websocket.send_text(json.dumps(message))
-                logger.debug(f"[AGENT TO CLIENT]: {message}")
-                continue
-
-            part: Part = (
-                event.content and event.content.parts and event.content.parts[0]
-            )
-
-            role = event.content and event.content.role
-
-            if not part:
-                continue
-
-            is_audio = part.inline_data and part.inline_data.mime_type.startswith(
-                "audio/pcm"
-            )
-            if is_audio:
-                audio_data = part.inline_data and part.inline_data.data
-                if audio_data:
-                    message = {
-                        "mime_type": "audio/pcm",
-                        "data": base64.b64encode(audio_data).decode("ascii"),
-                    }
-                    await websocket.send_text(json.dumps(message))
-                    continue
-
-            if part.text and event.partial and role == "model":
-                message = {
-                    "mime_type": "text/plain",
-                    "data": part.text,
-                    "role": role,
-                }
-                await websocket.send_text(json.dumps(message))
-            elif part.text and role == "user":
-                message = {
-                    "mime_type": "text/plain",
-                    "data": part.text,
-                    "role": role,
-                }
-                await websocket.send_text(json.dumps(message))
-
-    try:
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(handle_websocket_messages(), name="MessageHandler")
-            tg.create_task(receive_and_process_responses(), name="ResponseHandler")
-    except WebSocketDisconnect:
-        logger.debug(f"Client #{user_id} disconnected gracefully.")
+                
+                if event.content and event.content.parts:
+                    logger.info(f"Event has {len(event.content.parts)} parts")
+                    clean_parts = []
+                    for i, part in enumerate(event.content.parts):
+                        try:
+                            # Only include parts that have actual text content.
+                            # This filters out binary metadata like 'thought_signature'.
+                            if hasattr(part, "text") and part.text is not None:
+                                clean_parts.append({"text": part.text})
+                                logger.info(f"Added text part {i}: {len(part.text)} chars")
+                        except Exception as part_error:
+                            logger.warning(f"Error processing part {i}: {part_error}")
+                            continue
+                    
+                    if clean_parts:
+                        event_dict["content"] = {
+                            "role": event.content.role,
+                            "parts": clean_parts
+                        }
+                
+                response_events.append(event_dict)
+                logger.info(f"Added event to response: {len(response_events)} total events")
+                
+        except Exception as runner_error:
+            logger.error(f"Error in runner.run() loop: {runner_error}")
+            import traceback
+            logger.error(f"Runner traceback: {traceback.format_exc()}")
+            # Don't re-raise, try to return what we have so far
+            if response_events:
+                logger.info(f"Returning partial response with {len(response_events)} events")
+        
+        return response_events
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
-        traceback.print_exc()
-    finally:
-        logger.info(f"Client #{user_id} disconnected.")
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Error running agent: {e}")
+        logger.error(f"Full traceback: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
 
+@app.get("/")
+async def read_root():
+    return {"message": "ADK Backend Server is running."}
+
+@app.post("/api/generate-chart")
+async def generate_chart(request: Request):
+    """
+    Dedicated chart generation endpoint using proven chart generation logic
+    """
+    try:
+        import json
+        import numpy as np
+        import matplotlib.pyplot as plt
+        from datetime import datetime
+        import re
+        
+        chart_request = await request.json()
+        
+        # Generate chart using the proven logic from simple_chart_server.py
+        chart_data = chart_request.get("data", {})
+        title = chart_request.get("title", "Financial Analysis")
+        chart_type = chart_request.get("chart_type", "line_projection")
+        
+        plt.ioff()
+        fig = plt.figure(figsize=(12, 8))
+        plt.clf()
+        
+        # Simple chart creation based on type
+        if chart_type == "line_projection":
+            years = chart_data.get("years", [2024, 2025, 2026, 2027, 2028])
+            values = chart_data.get("values", [1000, 1200, 1400, 1600, 1800])
+            plt.plot(years, values, marker='o', linewidth=3, markersize=10)
+            plt.xlabel('Year', fontsize=14)
+            plt.ylabel('Value ($)', fontsize=14)
+        elif chart_type == "spending_pie":
+            labels = chart_data.get("labels", ["Housing", "Food", "Transport", "Entertainment"])
+            sizes = chart_data.get("sizes", [40, 25, 20, 15])
+            plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
+        else:
+            # Default fallback
+            years = [2024, 2025, 2026, 2027, 2028]
+            values = [1000, 1200, 1400, 1600, 1800]
+            plt.plot(years, values, marker='o', linewidth=3, markersize=10)
+            plt.xlabel('Year', fontsize=14)
+            plt.ylabel('Value ($)', fontsize=14)
+        
+        plt.title(title, fontsize=18, fontweight='bold', pad=20)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save to static directory
+        safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        filename = f"{safe_title}_{timestamp}.png"
+        
+        static_dir = os.path.join(os.path.dirname(__file__), "static", "images")
+        os.makedirs(static_dir, exist_ok=True)
+        filepath = os.path.join(static_dir, filename)
+        
+        plt.savefig(filepath, format='png', dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        
+        image_url = f"/static/images/{filename}"
+        logger.info(f"Chart generated successfully: {image_url}")
+        
+        return {"success": True, "url": image_url, "title": title}
+        
+    except Exception as e:
+        logger.error(f"Chart generation failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+@app.get("/test-chart")
+async def test_chart():
+    """Debug endpoint to test chart generation without agents"""
+    try:
+        from agents.banking_agent.sub_agents.tools import render_chart_and_get_url
+        
+        # Simple test data
+        test_data = {
+            "chart_type": "line_projection",
+            "title": "Test Chart",
+            "data": {
+                "years": [2024, 2025, 2026, 2027, 2028],
+                "values": [1000, 1200, 1400, 1600, 1800]
+            }
+        }
+        
+        # Generate chart
+        image_url = render_chart_and_get_url(test_data, "Test Chart")
+        
+        if image_url.startswith("ERROR_"):
+            return {"error": image_url}
+        
+        # Return simple HTML
+        html = f"""
+        <html>
+        <body>
+            <h2>Test Chart</h2>
+            <img src="{image_url}" alt="Test Chart" style="max-width: 100%; height: auto;">
+            <p>Image URL: {image_url}</p>
+        </body>
+        </html>
+        """
+        
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=html)
+        
+    except Exception as e:
+        return {"error": f"Chart generation failed: {str(e)}"}
 
 if __name__ == "__main__":
-    try:
-        uvicorn.run(
-            "main:app",
-            host="0.0.0.0",
-            port=8881,
-            reload=True,
-            reload_dirs=["./static", "./my_agent"],
-        )
-    except KeyboardInterrupt:
-        logger.info("Server shutdown requested via KeyboardInterrupt")
-    except Exception as e:
-        logger.error(f"Server error: {e}")
-    finally:
-        logger.info("Server shutdown complete")
+    logger.info("Starting ADK Backend Server...")
+    uvicorn.run(app, host="0.0.0.0", port=8881)

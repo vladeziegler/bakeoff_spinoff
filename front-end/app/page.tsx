@@ -6,15 +6,35 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Send, Bot, User, TrendingUp, PieChart, BarChart3, Sparkles, Shield, AlertCircle } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Send, Bot, User, TrendingUp, PieChart, BarChart3, Sparkles, Shield, AlertCircle, Paperclip, X, FileText, Image, Video, Music } from "lucide-react"
 import { useAgentStore, useAgentActions } from "@/app/src/stores/useAgentStore"
+
+const getInitials = (name: string) => {
+  const names = name.split(' ');
+  const initials = names.map(n => n[0]);
+  if (initials.length > 2) {
+    return initials.slice(0, 2).join('').toUpperCase();
+  }
+  return initials.join('').toUpperCase();
+};
+
+const renderVisualization = (html: string) => {
+  return (
+    <div 
+      className="mt-3 rounded-lg border overflow-hidden slide-in-up"
+      dangerouslySetInnerHTML={{ __html: html }} 
+    />
+  );
+};
 
 export default function BankingAIChat() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userIdInput, setUserIdInput] = useState("")
   const [inputValue, setInputValue] = useState("")
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Agent store
   const { 
@@ -59,14 +79,36 @@ export default function BankingAIChat() {
   }
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return
+    if ((!inputValue.trim() && selectedFiles.length === 0) || isLoading) return
 
     const messageToSend = inputValue.trim()
     setInputValue("")
     
     if (error) clearError()
     
-    await sendMessage(messageToSend)
+    // Send message with attachments if any
+    await sendMessage(messageToSend || "Here are some files to analyze", selectedFiles)
+    setSelectedFiles([])
+  }
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    setSelectedFiles(prev => [...prev, ...files])
+    // Reset input to allow selecting the same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const getFileIcon = (mimeType: string) => {
+    if (mimeType.startsWith('image/')) return <Image className="w-4 h-4" />
+    if (mimeType.startsWith('video/')) return <Video className="w-4 h-4" />
+    if (mimeType.startsWith('audio/')) return <Music className="w-4 h-4" />
+    return <FileText className="w-4 h-4" />
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -74,15 +116,6 @@ export default function BankingAIChat() {
       e.preventDefault()
       handleSendMessage()
     }
-  }
-
-  const renderVisualization = (html: string) => {
-    return (
-      <div
-        className="visualization mt-3 slide-in-up"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
   }
 
   if (!isAuthenticated) {
@@ -180,7 +213,18 @@ export default function BankingAIChat() {
                     <p className={`text-sm leading-relaxed ${message.isError ? 'text-red-700' : ''}`}>
                       {message.content}
                     </p>
+                    {/* Use a single render function. Pass the visualization flag. */}
                     {message.hasVisualization && message.visualizationHtml && renderVisualization(message.visualizationHtml)}
+        {message.hasVisualization && message.chartUrl && (
+          <div className="mt-3 rounded-lg border overflow-hidden slide-in-up">
+            <img 
+              src={message.chartUrl} 
+              alt="Generated Chart" 
+              className="w-full h-auto"
+              style={{ maxWidth: '100%', height: 'auto' }}
+            />
+          </div>
+        )}
                     <p className="text-xs opacity-70 mt-2">
                       {message.timestamp.toLocaleTimeString([], {
                         hour: "2-digit",
@@ -260,7 +304,50 @@ export default function BankingAIChat() {
           </div>
 
           <CardContent className="p-4 pt-0">
+            {/* Selected Files Display */}
+            {selectedFiles.length > 0 && (
+              <div className="mb-3 p-3 bg-secondary/10 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Paperclip className="w-4 h-4 text-secondary" />
+                  <span className="text-sm font-medium">Selected Files ({selectedFiles.length})</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center gap-2 bg-background/50 rounded-lg px-3 py-2 text-xs border">
+                      {getFileIcon(file.type)}
+                      <span className="truncate max-w-32">{file.name}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeFile(index)}
+                        className="h-4 w-4 p-0 hover:bg-red-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                accept="image/*,video/*,audio/*,.pdf,.txt,.doc,.docx,.csv,.json"
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="shrink-0 border-secondary/20 hover:bg-secondary/10 transition-all duration-300"
+              >
+                <Paperclip className="w-4 h-4" />
+              </Button>
               <Input
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
@@ -271,7 +358,7 @@ export default function BankingAIChat() {
               />
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isLoading}
+                disabled={(!inputValue.trim() && selectedFiles.length === 0) || isLoading}
                 size="icon"
                 className="shrink-0 bg-gradient-to-r from-secondary to-accent hover:from-secondary/80 hover:to-accent/80 transition-all duration-300 hover:scale-110 pulse-glow"
               >

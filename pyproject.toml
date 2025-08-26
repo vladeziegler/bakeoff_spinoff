@@ -1,19 +1,22 @@
-[project]
-name = "adk-streaming-test"
+[tool.poetry]
+name = "adk-banking-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "ADK Banking Agent with FastAPI server."
+authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-    "google-adk[a2a]>=1.10.0",
-    "fastapi",
-    "uvicorn",
-    "python-dotenv",
-    "google-genai",
-    "websockets",
-    "matplotlib",
-    "numpy"
-]
 
-[tool.setuptools]
-packages = ["agents"]
+[tool.poetry.dependencies]
+python = "^3.11"
+google-adk = {extras = ["a2a"], version = "^1.10.0"}
+fastapi = "^0.115.0"
+uvicorn = "^0.34.1"
+python-dotenv = "^1.0.1"
+matplotlib = "^3.9.0"
+numpy = "^1.26.4"
+deprecated = "^1.2.14"
+requests = "^2.31.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

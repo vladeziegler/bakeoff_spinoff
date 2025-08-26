@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chart Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; text-align: center; }
+        .chart-container { margin: 20px; }
+        img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Chart Display Test</h1>
+    <div class="chart-container">
+        <h3>Existing Chart</h3>
+        <img src="/static/images/Financial_Growth_Over_10_Years_20250826-145142.png" alt="Financial Chart">
+        <p>This should display an existing chart</p>
+    </div>
+    
+    <div class="chart-container">
+        <h3>Test New Chart Generation</h3>
+        <button onclick="generateChart()">Generate New Chart</button>
+        <div id="result"></div>
+    </div>
+    
+    <script>
+        async function generateChart() {
+            try {
+                const response = await fetch('/chart');
+                const html = await response.text();
+                document.getElementById('result').innerHTML = html;
+            } catch (error) {
+                document.getElementById('result').innerHTML = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
