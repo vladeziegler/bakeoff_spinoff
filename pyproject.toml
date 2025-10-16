@@ -1,9 +1,10 @@
 [tool.poetry]
-name = "adk-banking-agent"
+name = "adk-bricks-bakeoff"
 version = "0.1.0"
 description = "ADK Banking Agent with FastAPI server."
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
+packages = [{include = "agents"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"

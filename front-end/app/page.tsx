@@ -251,7 +251,7 @@ export default function BankingAIChat() {
                       </div>
                     )}
                     <p className="text-xs opacity-70 mt-2">
-                      {message.timestamp.toLocaleTimeString([], {
+                      {new Date(message.timestamp).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
