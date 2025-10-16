@@ -11,6 +11,7 @@ import type {
   FileReference
 } from '@/app/src/types/agent'
 import { processBase64Image } from './base64'
+import { formatAgentText, formatToolCall, formatToolResponse, formatCodeExecution, formatCodeResult } from './text-formatter'
 
 /**
  * Agent Response Processor
@@ -93,7 +94,7 @@ export class AgentResponseProcessor {
     if (event.errorCode || event.errorMessage) {
       this.hasErrors = true
       this.errorMessage = event.errorMessage || event.errorCode
-      console.error('❌ Agent error:', this.errorMessage)
+      console.warn('⚠️ Agent error:', this.errorMessage)
     }
 
     // Process content parts
@@ -231,10 +232,14 @@ export class AgentResponseProcessor {
    * Build final processed response from accumulated data
    */
   private buildResponse(): ProcessedAgentResponse {
-    // Combine text parts - only use default if NO text was found at all
-    const textContent = this.textParts.length > 0
+    // Just get the main text content - don't add tool activity narrative
+    // Tool activity will be shown separately in the UI
+    const rawText = this.textParts.length > 0
       ? this.textParts.join('\n\n')
-      : '' // Empty string instead of default message
+      : ''
+    
+    // Clean up and format the text for better display
+    const textContent = formatAgentText(rawText)
 
     // Build tool activity if any tools were used
     const toolActivity: ToolActivity | undefined = 

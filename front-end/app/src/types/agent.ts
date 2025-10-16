@@ -16,6 +16,7 @@ export interface AgentMessage {
   status?: 'sending' | 'sent' | 'failed'
   retryCount?: number
   toolActivity?: ToolActivity
+  codeActivity?: CodeActivity  // Added for code execution display
   metadata?: ResponseMetadata
 }
 

@@ -9,6 +9,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Bot, User, TrendingUp, PieChart, BarChart3, Sparkles, Shield, AlertCircle, Paperclip, X, FileText, Image, Video, Music } from "lucide-react"
 import { useAgentStore, useAgentActions } from "@/app/src/stores/useAgentStore"
+import { MessageContent } from "@/components/MessageContent"
+import { ToolActivityDisplay } from "@/components/ToolActivity"
 
 const getInitials = (name: string) => {
   const names = name.split(' ');
@@ -213,15 +215,18 @@ export default function BankingAIChat() {
                           : "bg-card/80 border backdrop-blur-sm"
                     }`}
                   >
-                    <p className={`text-sm leading-relaxed break-words ${
-                      message.isError 
-                        ? 'text-red-700' 
-                        : message.sender === 'user' 
-                          ? 'text-white font-medium' 
-                          : ''
-                    }`}>
-                      {message.content}
-                    </p>
+                    <MessageContent 
+                      content={message.content} 
+                      isUser={message.sender === 'user'}
+                    />
+                    
+                    {/* Show tool activity for agent messages */}
+                    {message.sender === 'agent' && (message.toolActivity || message.codeActivity) && (
+                      <ToolActivityDisplay 
+                        toolActivity={message.toolActivity}
+                        codeActivity={message.codeActivity}
+                      />
+                    )}
                     {/* Only handle ADK artifacts - no legacy charts */}
                     {message.hasVisualization && message.artifactImageUrl && (
                       <div className="mt-3 rounded-lg border overflow-hidden slide-in-up w-full max-w-full">

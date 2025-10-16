@@ -16,6 +16,7 @@ import type {
 
 // Import utilities
 import { AgentAPIClient } from '@/app/src/utils/agent-api-client'
+import { AgentSSEClient } from '@/app/src/utils/agent-sse-client'
 import { AgentResponseProcessor } from '@/app/src/utils/agent-response-processor'
 import { API_CONFIG } from '@/app/src/config/route'
 
@@ -57,6 +58,7 @@ interface AgentState {
 // ============================================================================
 
 const apiClient = new AgentAPIClient(API_CONFIG.baseUrl)
+const sseClient = new AgentSSEClient()
 const responseProcessor = new AgentResponseProcessor()
 
 // ============================================================================
@@ -208,53 +210,108 @@ export const useAgentStore = create<AgentState>()(
           // Update user message status
           updateMessage(userMessageId, { status: 'sent' })
 
-          // Send message to agent
-          console.log('🚀 Sending message to agent...')
-          const events = await apiClient.sendMessage({
-            appName: API_CONFIG.appName,
-            userId,
-            sessionId: currentSessionId,
-            newMessage: { parts, role: 'user' }
-          })
-
-          console.log(`✅ Received ${events.length} events from agent`)
-
-          // Process response events
-          const processed = responseProcessor.process(events)
+          // Send message using SSE for TRUE real-time streaming
+          console.log('🌊 Starting real-time SSE stream...')
           
-          console.log('📊 Processed response:', {
-            textLength: processed.textContent.length,
-            textPreview: processed.textContent.substring(0, 100),
-            hasArtifacts: !!processed.artifacts,
-            hasToolActivity: !!processed.toolActivity,
-            hasErrors: processed.metadata.hasErrors,
-            turnComplete: processed.metadata.turnComplete
-          })
-
-          // Handle empty response
-          if (!processed.textContent && !processed.artifacts && !processed.toolActivity) {
-            console.warn('⚠️ Empty response from agent - no text, artifacts, or tool activity')
-          }
-
-          // Create agent message
-          const agentMessage: AgentMessage = {
-            id: `agent-${Date.now()}`,
-            content: processed.textContent || 'No response from agent',
+          // Create initial agent message placeholder
+          const agentMessageId = `agent-${Date.now()}`
+          const initialAgentMessage: AgentMessage = {
+            id: agentMessageId,
+            content: 'Thinking...',
             sender: 'agent',
             timestamp: new Date().toISOString(),
-            hasVisualization: !!processed.artifacts?.images?.length,
-            artifactImageUrl: processed.artifacts?.images?.[0],
-            toolActivity: processed.toolActivity,
-            metadata: processed.metadata,
-            status: 'sent',
-            isError: processed.metadata.hasErrors || !processed.textContent,
+            status: 'sending',
           }
-
+          
+          // Add placeholder message immediately
           set((state) => ({
-            messages: [...state.messages, agentMessage],
-            isLoading: false,
-            isProcessing: false,
+            messages: [...state.messages, initialAgentMessage],
           }))
+
+          // Accumulate data across events
+          let cumulativeText = ''
+          let cumulativeToolCalls: any[] = []
+          let cumulativeToolResponses: any[] = []
+          let cumulativeCodeExecutions: any[] = []
+          let cumulativeImages: string[] = []
+          let hasFinalText = false
+
+          // Start SSE stream
+          await sseClient.sendMessageSSE(
+            {
+              appName: API_CONFIG.appName,
+              userId,
+              sessionId: currentSessionId,
+              newMessage: { parts, role: 'user' },
+              streaming: true,
+            },
+            // onEvent - called for each event as it arrives in real-time
+            (event) => {
+              const partialProcessor = new AgentResponseProcessor()
+              const partialProcessed = partialProcessor.process([event], true)
+              
+              // Accumulate tool activity and code execution
+              if (partialProcessed.toolActivity?.calls) {
+                cumulativeToolCalls.push(...partialProcessed.toolActivity.calls)
+              }
+              
+              if (partialProcessed.toolActivity?.responses) {
+                cumulativeToolResponses.push(...partialProcessed.toolActivity.responses)
+              }
+              
+              if (partialProcessed.codeActivity?.executions) {
+                cumulativeCodeExecutions.push(...partialProcessed.codeActivity.executions)
+              }
+              
+              if (partialProcessed.artifacts?.images) {
+                cumulativeImages.push(...partialProcessed.artifacts.images)
+              }
+              
+              // Check if this event has actual text content (not tool calls/responses)
+              if (partialProcessed.textContent && partialProcessed.textContent.trim()) {
+                hasFinalText = true
+                cumulativeText += (cumulativeText ? '\n' : '') + partialProcessed.textContent
+              }
+
+              // If we have final text, hide tool activity and show only the response
+              const updatedMessage: Partial<AgentMessage> = hasFinalText ? {
+                content: cumulativeText,
+                toolActivity: undefined, // Hide tool activity once we have the response
+                codeActivity: undefined,  // Hide code activity once we have the response
+                hasVisualization: cumulativeImages.length > 0,
+                artifactImageUrl: cumulativeImages[0],
+                status: 'sending',
+              } : {
+                // While processing, show tool activity
+                content: 'Working on your request...',
+                toolActivity: cumulativeToolCalls.length > 0 || cumulativeToolResponses.length > 0 
+                  ? { calls: cumulativeToolCalls, responses: cumulativeToolResponses }
+                  : undefined,
+                codeActivity: cumulativeCodeExecutions.length > 0
+                  ? { executions: cumulativeCodeExecutions }
+                  : undefined,
+                status: 'sending',
+              }
+              
+              updateMessage(agentMessageId, updatedMessage)
+            },
+            // onComplete - called when stream finishes
+            () => {
+              console.log('✅ SSE stream completed')
+              // Final update with just the text response
+              updateMessage(agentMessageId, { 
+                status: 'sent',
+                toolActivity: undefined,
+                codeActivity: undefined,
+              })
+              set({ isLoading: false, isProcessing: false })
+            },
+            // onError - called if stream fails
+            (error) => {
+              console.error('❌ SSE stream error:', error.message)
+              throw error
+            }
+          )
 
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
@@ -359,6 +416,10 @@ export const useAgentActions = () => {
     clearMessages,
     setUserId,
     clearError,
+    // Helper functions for quick actions
+    requestSpendingAnalysis: () => sendMessage('Look at transactions for past 30 days, and return pie chart'),
+    requestPortfolioBreakdown: () => sendMessage('Show me history of transactions on a monthly basis in bar chart, each one per month. generate bar chart with results'),
+    requestBudgetComparison: () => sendMessage('Show stacked bars with assets on one side, liabilities on the other'),
   }
 }
 
