@@ -21,6 +21,25 @@ export interface AgentMessage {
 }
 
 // ============================================================================
+// Event Timeline (for displaying agent reasoning steps)
+// ============================================================================
+
+export interface ProcessedEvent {
+  title: string
+  data: {
+    type: 'functionCall' | 'functionResponse' | 'thinking' | 'codeExecution' | 'text'
+    name?: string
+    args?: any
+    response?: any
+    content?: string
+    code?: string
+    language?: string
+    result?: string
+  }
+  timestamp: string
+}
+
+// ============================================================================
 // ADK Event Types (from api.json)
 // ============================================================================
 

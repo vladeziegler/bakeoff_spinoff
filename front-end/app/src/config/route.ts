@@ -18,8 +18,8 @@ export const API_CONFIG = {
   // Number of retry attempts for failed requests
   retryAttempts: parseInt(process.env.NEXT_PUBLIC_API_RETRY_ATTEMPTS || '3', 10),
   
-  // Enable debug logging
-  debug: process.env.NEXT_PUBLIC_API_DEBUG === 'true',
+  // Enable debug logging (forced true for now)
+  debug: true,  // Force enable for debugging
 } as const
 
 /**

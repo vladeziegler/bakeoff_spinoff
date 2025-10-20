@@ -1,245 +1,317 @@
-# Real-Time Streaming Implementation
+# Custom SSE Streaming Implementation
 
-## What Changed
+## 🎯 **Overview**
 
-### **Progressive Event Processing** 🌊
+We've implemented a custom SSE (Server-Sent Events) streaming solution to provide **incremental real-time updates** in the frontend, even though ADK's backend doesn't support true streaming.
 
-The agent now shows updates **as events are processed**, not all at once at the end.
+---
 
-### How It Works
+## 📁 **New Files Created**
 
-#### Before (All at Once):
+### 1. `/app/api/run_sse_custom/route.ts`
+**Purpose**: Next.js API Route that acts as a middleware proxy
+
+**What it does**:
+- Receives streaming requests from the frontend
+- Forwards them to ADK's `/run` endpoint (batch mode)
+- Receives all events at once from ADK
+- **Streams events incrementally to the frontend** with 50ms delays
+- Converts batch response → SSE format
+
+**Key Features**:
+- ✅ Proper SSE headers with `text/event-stream`
+- ✅ CORS enabled
+- ✅ Error handling for ADK failures
+- ✅ Incremental event emission with delays
+- ✅ Logging for debugging
+
+---
+
+### 2. `/app/api/run_sse_custom/json-fragment-processor.ts`
+**Purpose**: JSON Fragment Processor (prepared for future true streaming)
+
+**What it does**:
+- Parses incomplete JSON fragments from streaming responses
+- Extracts complete objects as they arrive
+- Designed for true ADK streaming (when available)
+
+**Status**: 
+- ⚠️ Currently not used (ADK doesn't stream)
+- ✅ Ready for future ADK updates
+- ✅ Based on reference implementation
+
+---
+
+## 🔄 **Modified Files**
+
+### 1. `/app/src/utils/agent-sse-client.ts`
+**Change**: Updated endpoint from `/run_sse` to `/run_sse_custom`
+
+```typescript
+const url = getApiUrl('/run_sse_custom')
 ```
-User sends message
-     ↓
-[Wait for ALL events to complete]
-     ↓
-Show everything at once
-```
 
-#### After (Progressive Updates):
+This redirects all SSE requests to our custom proxy.
+
+---
+
+## 🏗️ **Architecture**
+
 ```
-User sends message
-     ↓
-Show "Thinking..." immediately
-     ↓
-Event 1: Tool call → Update UI (show tool call)
-     ↓ (50ms delay)
-Event 2: Tool response → Update UI (show completion)
-     ↓ (50ms delay)
-Event 3: Text response → Update UI (show text)
-     ↓ (50ms delay)
-Event 4: Chart data → Update UI (show chart)
-     ↓
-Done!
+┌─────────────────┐
+│   Frontend      │
+│  (React/Zustand)│
+└────────┬────────┘
+         │ SSE Request
+         ▼
+┌─────────────────────────┐
+│ /api/run_sse_custom     │  ← **Our Custom Proxy**
+│ (Next.js API Route)     │
+└────────┬────────────────┘
+         │ HTTP POST /run
+         ▼
+┌─────────────────────────┐
+│   ADK Backend           │
+│   (localhost:8000)      │
+└────────┬────────────────┘
+         │ Batch Response
+         ▼
+┌─────────────────────────┐
+│ Custom Proxy Streams    │  ← **Incremental Emission**
+│ Events 1-by-1 (50ms)    │
+└────────┬────────────────┘
+         │ SSE Events
+         ▼
+┌─────────────────┐
+│   Frontend      │
+│  Real-time UI   │
+└─────────────────┘
 ```
 
 ---
 
-## Implementation Details
+## ⚡ **How It Works**
 
-### 1. **Immediate Placeholder**
+### **Step 1: Frontend Request**
+Frontend sends message via `AgentSSEClient`:
 ```typescript
-// Create placeholder message immediately
-const initialAgentMessage = {
-  content: 'Thinking...',
-  status: 'sending',
-}
-// Add to messages right away
+await sseClient.sendMessageSSE(
+  {
+    appName: 'banking_agent',
+    userId,
+    sessionId,
+    newMessage: { parts, role: 'user' },
+    streaming: true,
+  },
+  onEvent,    // Called for each event
+  onComplete, // Called when done
+  onError     // Called on error
+)
 ```
 
-User sees feedback instantly, not after a delay.
+### **Step 2: Custom Proxy Processing**
+Our `/api/run_sse_custom` route:
+1. Receives request
+2. Forwards to ADK `/run` endpoint
+3. Waits for complete response
+4. **Streams events back one-by-one with 50ms delays**
 
-### 2. **Incremental Processing**
 ```typescript
 for (let i = 0; i < events.length; i++) {
-  const event = events[i]
+  const sseEvent = `data: ${JSON.stringify(events[i])}\n\n`
+  controller.enqueue(encoder.encode(sseEvent))
   
-  // Process this single event
-  const partialProcessed = processor.process([event], true)
-  
-  // Accumulate results
-  cumulativeToolCalls.push(...partialProcessed.toolActivity.calls)
-  cumulativeText += partialProcessed.textContent
-  
-  // Update UI immediately
-  updateMessage(agentMessageId, {
-    content: cumulativeText,
-    toolActivity: { calls: cumulativeToolCalls },
-  })
-  
-  // Small delay for visual effect
-  await new Promise(resolve => setTimeout(resolve, 50))
+  // Delay between events for incremental UI
+  if (i < events.length - 1) {
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
 }
 ```
 
-### 3. **Cumulative Updates**
-Each event adds to the previous state:
-- Tool calls accumulate
-- Text accumulates
-- Code executions accumulate
-- Images accumulate
-
-The UI updates with the **full accumulated state** after each event.
+### **Step 3: Frontend Processing**
+For each SSE event:
+1. `onEvent` callback fires
+2. Process event (extract tool calls, text, etc.)
+3. Update UI state
+4. React re-renders with new data
 
 ---
 
-## User Experience Timeline
+## 📊 **Event Timeline**
 
-### Example: "Show me a pie chart"
-
-**T+0ms**: User clicks send
+**Without Custom Proxy** (all at once):
 ```
-[User message appears]
-[Agent: "Thinking..."]
+11:13:39.804  →  All 20 events arrive
+11:13:39.804  →  UI updates with everything
 ```
 
-**T+200ms**: Event 1 received (tool call)
+**With Custom Proxy** (incremental):
 ```
-[Agent: "Thinking..."]
-[Tool Activity appears]
-• Using transfer_to_agent (1 param)
-```
-
-**T+250ms**: Event 2 received (another tool call)
-```
-[Agent: "Thinking..."]
-[Tool Activity updates]
-• Using transfer_to_agent (1 param)
-• Using cymbal_banking_agent (1 param)
+11:13:00.000  →  Event #1 (transfer_to_agent call)
+11:13:00.050  →  Event #2 (transfer_to_agent response)
+11:13:00.100  →  Event #3 (cymbal_banking_agent call)
+11:13:00.150  →  Event #4 (cymbal_banking_agent response)
+...           →  ...
+11:13:01.000  →  Event #20 (final text)
 ```
 
-**T+300ms**: Event 3 received (tool responses)
-```
-[Agent: "Thinking..."]
-[Tool Activity updates]
-• Using transfer_to_agent (1 param)
-• Using cymbal_banking_agent (1 param)
-Completed
-• transfer_to_agent
-• cymbal_banking_agent
-```
-
-**T+500ms**: Event 4 received (text response)
-```
-[Agent: "Here's your spending analysis..."]
-[Tool Activity still visible]
-```
-
-**T+700ms**: Event 5 received (chart data)
-```
-[Agent: "Here's your spending analysis..."]
-[Tool Activity still visible]
-[Chart appears]
-```
-
-**T+750ms**: Final event (turn_complete)
-```
-[Agent message status: 'sent']
-[Loading indicator disappears]
-```
+Each event triggers a UI update → **users see progress in real-time!**
 
 ---
 
-## Key Features
+## ✅ **Benefits**
 
-### ✅ Immediate Feedback
-- "Thinking..." appears instantly
-- No blank waiting period
-
-### ✅ Progressive Updates
-- Tool calls appear as they're processed
-- Text builds up incrementally
-- Charts appear when ready
-
-### ✅ Visual Continuity
-- Each update builds on the previous
-- Smooth transitions (50ms between updates)
-- No jarring replacements
-
-### ✅ Clear Status
-- "Sending" status while processing
-- "Sent" status when complete
-- Loading indicator visible during processing
+1. **Better UX**: Users see agent thinking/working
+2. **Progress Indication**: Timeline shows each step as it "happens"
+3. **Professional Feel**: Smooth, incremental updates
+4. **No Backend Changes**: Works with ADK as-is
+5. **Future-Proof**: Ready for true ADK streaming
 
 ---
 
-## Technical Notes
+## 🎨 **User Experience**
 
-### ADK Web Server Limitation
-The `/run` endpoint returns **all events at once** (not true streaming). However, we simulate streaming by:
-1. Processing the events array incrementally
-2. Adding small delays between updates
-3. Updating the UI after each event
+**Before** (batch mode):
+- User sends message → ⏳ Loading spinner → 💬 All content appears at once
 
-### True Streaming (Future Enhancement)
-For real Server-Sent Events (SSE) streaming:
+**After** (custom streaming):
+- User sends message → 
+- 🔧 "Using tool: Transfer To Agent" appears
+- ✅ "Tool completed" appears
+- 🔧 "Using tool: Cymbal Banking Agent" appears
+- ✅ "Tool completed" appears
+- 💻 "Executing code" appears
+- 💬 Text response builds up progressively
+
+---
+
+## 🔧 **Configuration**
+
+### Timing
+Current delay: `50ms` between events
+
+To adjust:
 ```typescript
-// Would need SSE endpoint like /run-stream
-const eventSource = new EventSource(`/api/run-stream?sessionId=${sessionId}`)
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data)
-  // Update UI immediately
-  updateMessage(agentMessageId, data)
-}
+// In /app/api/run_sse_custom/route.ts
+await new Promise(resolve => setTimeout(resolve, 50)) // ← Change this
 ```
 
-This would require backend changes to support SSE.
+Recommendations:
+- **Faster (25ms)**: More responsive, but might feel rushed
+- **Current (50ms)**: Good balance
+- **Slower (100ms)**: More deliberate, better for demos
+
+### Endpoint
+Frontend connects to: `/api/run_sse_custom`
+
+Backend (ADK) endpoint: `http://localhost:8000/run`
 
 ---
 
-## Files Modified
+## 🐛 **Debugging**
 
-### `/stores/useAgentStore.ts`
-- ✅ Added placeholder message creation
-- ✅ Implemented incremental event processing
-- ✅ Added cumulative state tracking
-- ✅ Added progressive UI updates with delays
+### Check Logs
 
----
+**Frontend Console**:
+```javascript
+console.log('⚡ EVENT RECEIVED AT ...')
+console.log('🌊 Opening SSE stream...')
+```
 
-## Testing
+**Backend Console** (Next.js):
+```
+[CUSTOM SSE] Incoming streaming request
+[CUSTOM SSE] Received X events from ADK
+[CUSTOM SSE] Streaming event #1 at +0ms
+[CUSTOM SSE] Streaming event #2 at +50ms
+...
+```
 
-**To see the streaming effect**:
-1. Refresh browser
-2. Send message: "Show me a pie chart of my spending"
-3. Watch the updates:
-   - "Thinking..." appears immediately
-   - Tool calls appear one by one
-   - Text builds up
-   - Chart appears
-   - Status changes to "sent"
+### Common Issues
 
-**Expected behavior**:
-- ✅ No delay before first feedback
-- ✅ Tool activity appears progressively
-- ✅ Smooth, incremental updates
-- ✅ Professional, polished UX
+**No events appearing**:
+- Check browser console for SSE errors
+- Verify `/api/run_sse_custom` is accessible
+- Check ADK backend is running on port 8000
 
----
+**All events appear at once**:
+- Check that `agent-sse-client.ts` is using `/run_sse_custom`
+- Verify the delay is present in the API route
 
-## Benefits
-
-### User Perception
-- Feels faster (immediate feedback)
-- Reduces anxiety (shows progress)
-- Professional appearance
-- Transparent process
-
-### Technical
-- Same API (no backend changes)
-- Backward compatible
-- Easy to enhance with real SSE later
-- Minimal performance impact (50ms delays)
+**Session errors**:
+- Clear browser cache/storage
+- Use a new User ID
+- Check ADK backend logs
 
 ---
 
-## Performance
+## 🚀 **Testing**
 
-- **Event processing**: ~50ms per event
-- **Typical message**: 5-10 events = 250-500ms total animation
-- **Network time**: Unchanged (same API call)
-- **UI updates**: Efficient (React reconciliation)
+### In Browser
+1. Open app at `http://localhost:3000`
+2. Send a message
+3. Open DevTools → Network tab → Filter "run_sse_custom"
+4. Watch EventStream tab for incremental events
 
-The delays are intentional for UX - they make the streaming visible and professional.
+### Expected Behavior
+- ✅ Events appear one-by-one
+- ✅ Timeline updates progressively
+- ✅ Text builds up incrementally
+- ✅ Loading states transition smoothly
 
+---
+
+## 📈 **Future Improvements**
+
+### When ADK Supports True Streaming
+1. Update `/api/run_sse_custom/route.ts` to use `run_sse` endpoint
+2. Enable `JSONFragmentProcessor` for real-time parsing
+3. Remove artificial delays
+4. Stream events as they're generated by ADK
+
+### Code Changes Needed
+```typescript
+// In route.ts, replace batch mode with:
+const stream = new ReadableStream({
+  async start(controller) {
+    const reader = adkResponse.body.getReader()
+    const processor = new JSONFragmentProcessor((sseEvent) => {
+      controller.enqueue(new TextEncoder().encode(sseEvent))
+    })
+    
+    // Stream chunks in real-time
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      processor.processChunk(decoder.decode(value))
+    }
+  }
+})
+```
+
+---
+
+## 🎓 **Key Takeaways**
+
+1. **ADK doesn't support true streaming yet** → We simulate it
+2. **Custom API route acts as middleware** → Incremental emission
+3. **Frontend gets real-time updates** → Better UX
+4. **No backend agent changes required** → Works with existing ADK
+5. **Ready for future ADK updates** → JSONFragmentProcessor prepared
+
+---
+
+## 📝 **Related Files**
+
+- Frontend SSE Client: `/app/src/utils/agent-sse-client.ts`
+- Custom API Route: `/app/api/run_sse_custom/route.ts`
+- JSON Processor: `/app/api/run_sse_custom/json-fragment-processor.ts`
+- Event Timeline UI: `/components/EventTimeline.tsx`
+- Event Formatting: `/app/src/utils/event-formatter.ts`
+- Zustand Store: `/app/src/stores/useAgentStore.ts`
+
+---
+
+**Status**: ✅ **Fully Implemented and Ready to Test**
+
+Test it now by sending a message in the UI and watching the console logs!

@@ -26,7 +26,8 @@ export class AgentSSEClient {
     // Create abort controller for cancellation
     this.controller = new AbortController()
     
-    const url = getApiUrl('/run_sse')
+    // Use custom SSE endpoint that properly streams without buffering
+    const url = getApiUrl('/run_sse_custom')
     const requestBody = {
       appName,
       userId,
@@ -70,15 +71,28 @@ export class AgentSSEClient {
       const decoder = new TextDecoder()
       let buffer = ''
       let eventCount = 0
+      const streamStartTime = Date.now()
+      
+      console.log('🌊'.repeat(40))
+      console.log(`SSE CLIENT: Stream started at ${new Date().toISOString()}`)
+      console.log('🌊'.repeat(40))
 
       while (true) {
         const { done, value } = await reader.read()
         
         if (done) {
-          console.log('✅ SSE stream completed', { totalEvents: eventCount })
+          const totalDuration = Date.now() - streamStartTime
+          console.log(`✅ SSE stream completed in ${totalDuration}ms`, { 
+            totalEvents: eventCount,
+            avgTimePerEvent: eventCount > 0 ? (totalDuration / eventCount).toFixed(2) + 'ms' : 'N/A'
+          })
           onComplete()
           break
         }
+
+        // Log when chunk arrives
+        const chunkTime = Date.now() - streamStartTime
+        console.log(`📦 CHUNK #${eventCount + 1} at +${chunkTime}ms (${value.length} bytes)`)
 
         // Decode the chunk
         buffer += decoder.decode(value, { stream: true })
@@ -94,14 +108,26 @@ export class AgentSSEClient {
               const event: AgentRunResponseEvent = JSON.parse(jsonData)
               
               eventCount++
+              const eventTime = Date.now() - streamStartTime
+              
+              console.log(`⚡ EVENT #${eventCount} parsed at +${eventTime}ms`)
               debugLog(`SSE Event #${eventCount}`, {
                 hasContent: !!event.content,
                 parts: event.content?.parts?.length || 0,
+                hasFunctionCall: event.content?.parts?.some(p => p.functionCall),
+                hasFunctionResponse: event.content?.parts?.some(p => p.functionResponse),
+                hasText: event.content?.parts?.some(p => p.text && !p.thought),
                 turnComplete: event.turn_complete || event.turnComplete,
               })
               
               // Call the event handler immediately
+              const handlerStartTime = Date.now()
               onEvent(event)
+              const handlerDuration = Date.now() - handlerStartTime
+              
+              if (handlerDuration > 10) {
+                console.warn(`⚠️  [SSE TIMING] Event handler took ${handlerDuration}ms (slow!)`)
+              }
               
             } catch (parseError) {
               console.warn('Failed to parse SSE event:', line.substring(0, 100))

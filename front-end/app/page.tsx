@@ -11,6 +11,7 @@ import { Send, Bot, User, TrendingUp, PieChart, BarChart3, Sparkles, Shield, Ale
 import { useAgentStore, useAgentActions } from "@/app/src/stores/useAgentStore"
 import { MessageContent } from "@/components/MessageContent"
 import { ToolActivityDisplay } from "@/components/ToolActivity"
+import EventTimeline from "@/components/EventTimeline"
 
 const getInitials = (name: string) => {
   const names = name.split(' ');
@@ -44,6 +45,8 @@ export default function BankingAIChat() {
   } = useAgentStore()
   
   const agentActions = useAgentActions()
+  // Subscribe to messageEvents Map to trigger re-renders when events are added
+  const messageEvents = useAgentStore(state => state.messageEvents)
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
@@ -220,13 +223,11 @@ export default function BankingAIChat() {
                       isUser={message.sender === 'user'}
                     />
                     
-                    {/* Show tool activity for agent messages */}
-                    {message.sender === 'agent' && (message.toolActivity || message.codeActivity) && (
-                      <ToolActivityDisplay 
-                        toolActivity={message.toolActivity}
-                        codeActivity={message.codeActivity}
-                      />
-                    )}
+                    {/* Show event timeline for agent messages */}
+                    {message.sender === 'agent' && (() => {
+                      const events = messageEvents.get(message.id) || []
+                      return events.length > 0 ? <EventTimeline events={events} /> : null
+                    })()}
                     {/* Only handle ADK artifacts - no legacy charts */}
                     {message.hasVisualization && message.artifactImageUrl && (
                       <div className="mt-3 rounded-lg border overflow-hidden slide-in-up w-full max-w-full">

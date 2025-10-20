@@ -11,7 +11,8 @@ import type {
   MessagePart,
   AgentRunResponseEvent,
   ToolActivity,
-  ResponseMetadata
+  ResponseMetadata,
+  ProcessedEvent
 } from '@/app/src/types/agent'
 
 // Import utilities
@@ -19,6 +20,11 @@ import { AgentAPIClient } from '@/app/src/utils/agent-api-client'
 import { AgentSSEClient } from '@/app/src/utils/agent-sse-client'
 import { AgentResponseProcessor } from '@/app/src/utils/agent-response-processor'
 import { API_CONFIG } from '@/app/src/config/route'
+import { 
+  formatFunctionCallEvent, 
+  formatFunctionResponseEvent, 
+  formatCodeExecutionEvent 
+} from '@/app/src/utils/event-formatter'
 
 // Import message builders (re-export from types for backward compatibility)
 export {
@@ -37,6 +43,7 @@ export {
 interface AgentState {
   // State
   messages: AgentMessage[]
+  messageEvents: Map<string, ProcessedEvent[]>  // Event timeline for each message
   isLoading: boolean
   isProcessing: boolean
   error: string | null
@@ -47,6 +54,8 @@ interface AgentState {
   sendMessage: (message: string, attachments?: File[]) => Promise<void>
   sendMultipartMessage: (parts: MessagePart[]) => Promise<void>
   updateMessage: (id: string, updates: Partial<AgentMessage>) => void
+  addMessageEvent: (messageId: string, event: ProcessedEvent) => void  // Add event to timeline
+  getEventsForMessage: (messageId: string) => ProcessedEvent[]  // Get events for a message
   retryMessage: (messageId: string) => Promise<void>
   clearMessages: () => void
   setUserId: (userId: string) => void
@@ -78,6 +87,7 @@ export const useAgentStore = create<AgentState>()(
           status: 'sent',
         }
       ],
+      messageEvents: new Map(),  // Event timeline storage
       isLoading: false,
       isProcessing: false,
       error: null,
@@ -114,6 +124,29 @@ export const useAgentStore = create<AgentState>()(
             m.id === id ? { ...m, ...updates } : m
           ),
         }))
+      },
+
+      /**
+       * Add an event to a message's timeline
+       */
+      addMessageEvent: (messageId, event) => {
+        set((state) => {
+          const newMap = new Map(state.messageEvents)
+          const existingEvents = newMap.get(messageId) || []
+          newMap.set(messageId, [...existingEvents, event])
+          
+          console.log(`⏱️  [STORE] Added event to timeline for message ${messageId}:`, event.title)
+          
+          return { messageEvents: newMap }
+        })
+      },
+
+      /**
+       * Get all events for a specific message
+       */
+      getEventsForMessage: (messageId) => {
+        const events = get().messageEvents.get(messageId) || []
+        return events
       },
 
       /**
@@ -171,7 +204,7 @@ export const useAgentStore = create<AgentState>()(
         // Create user message for display
         const textParts = parts.filter(p => p.text).map(p => p.text).join(' ')
         const userMessageId = `user-${uuidv4()}`
-        
+
         const userMessage: AgentMessage = {
           id: userMessageId,
           content: textParts || 'Message with attachments',
@@ -211,7 +244,9 @@ export const useAgentStore = create<AgentState>()(
           updateMessage(userMessageId, { status: 'sent' })
 
           // Send message using SSE for TRUE real-time streaming
-          console.log('🌊 Starting real-time SSE stream...')
+          console.log('='.repeat(80))
+          console.log('🌊 STARTING SSE STREAM')
+          console.log('='.repeat(80))
           
           // Create initial agent message placeholder
           const agentMessageId = `agent-${Date.now()}`
@@ -228,7 +263,10 @@ export const useAgentStore = create<AgentState>()(
             messages: [...state.messages, initialAgentMessage],
           }))
 
-          // Accumulate data across events
+          // Accumulate data across events with deduplication
+          const seenToolCallIds = new Set<string>()
+          const seenToolResponseIds = new Set<string>()
+          const seenTextParts = new Set<string>()
           let cumulativeText = ''
           let cumulativeToolCalls: any[] = []
           let cumulativeToolResponses: any[] = []
@@ -245,64 +283,110 @@ export const useAgentStore = create<AgentState>()(
               newMessage: { parts, role: 'user' },
               streaming: true,
             },
-            // onEvent - called for each event as it arrives in real-time
+            // onEvent - called for each event as it arrives
+            // NOTE: ADK /run_sse doesn't truly stream - it sends everything at once
+            // We'll process events immediately but they arrive in a batch
             (event) => {
+              const eventProcessStartTime = Date.now()
+              console.log('━'.repeat(80))
+              console.log(`⚡ EVENT RECEIVED AT ${new Date().toISOString()}`)
+              console.log('━'.repeat(80))
+              
               const partialProcessor = new AgentResponseProcessor()
               const partialProcessed = partialProcessor.process([event], true)
               
-              // Accumulate tool activity and code execution
+              console.log(`⏱️  [STORE] Processor returned in ${Date.now() - eventProcessStartTime}ms:`, {
+                hasText: !!partialProcessed.textContent,
+                hasToolCalls: !!partialProcessed.toolActivity?.calls?.length,
+                hasToolResponses: !!partialProcessed.toolActivity?.responses?.length,
+              })
+              
+              // ============================================================
+              // ADD EVENTS TO TIMELINE (instead of accumulating in message)
+              // ============================================================
+              
+              // Add tool calls as individual timeline events
               if (partialProcessed.toolActivity?.calls) {
-                cumulativeToolCalls.push(...partialProcessed.toolActivity.calls)
+                for (const call of partialProcessed.toolActivity.calls) {
+                  const callKey = call.id || `${call.name}-${JSON.stringify(call.args)}`
+                  if (!seenToolCallIds.has(callKey)) {
+                    seenToolCallIds.add(callKey)
+                    // Add to timeline instead of accumulating
+                    const event = formatFunctionCallEvent(call.name, call.args, call.id)
+                    get().addMessageEvent(agentMessageId, event)
+                  }
+                }
               }
               
+              // Add tool responses as individual timeline events
               if (partialProcessed.toolActivity?.responses) {
-                cumulativeToolResponses.push(...partialProcessed.toolActivity.responses)
+                for (const response of partialProcessed.toolActivity.responses) {
+                  const responseKey = response.id || response.name
+                  if (!seenToolResponseIds.has(responseKey)) {
+                    seenToolResponseIds.add(responseKey)
+                    // Add to timeline instead of accumulating
+                    const event = formatFunctionResponseEvent(response.name, response.result, response.id)
+                    get().addMessageEvent(agentMessageId, event)
+                  }
+                }
               }
               
+              // Add code executions as timeline events
               if (partialProcessed.codeActivity?.executions) {
-                cumulativeCodeExecutions.push(...partialProcessed.codeActivity.executions)
+                for (const exec of partialProcessed.codeActivity.executions) {
+                  const event = formatCodeExecutionEvent(exec.code, exec.language, exec.result)
+                  get().addMessageEvent(agentMessageId, event)
+                }
               }
               
+              // Collect images
               if (partialProcessed.artifacts?.images) {
-                cumulativeImages.push(...partialProcessed.artifacts.images)
+                for (const img of partialProcessed.artifacts.images) {
+                  if (!cumulativeImages.includes(img)) {
+                    cumulativeImages.push(img)
+                  }
+                }
               }
               
-              // Check if this event has actual text content (not tool calls/responses)
+              // Accumulate text content (deduplicate by exact match)
               if (partialProcessed.textContent && partialProcessed.textContent.trim()) {
-                hasFinalText = true
-                cumulativeText += (cumulativeText ? '\n' : '') + partialProcessed.textContent
+                const newText = partialProcessed.textContent.trim()
+                
+                // Check if this text is NOT already in cumulative text
+                if (!cumulativeText.includes(newText)) {
+                  hasFinalText = true
+                  cumulativeText = newText  // Replace, don't append (ADK sends complete text each time)
+                  console.log(`⏱️  [STORE] New text content received (${newText.length} chars)`)
+                } else {
+                  console.log(`⏱️  [STORE] Duplicate text ignored`)
+                }
               }
 
-              // If we have final text, hide tool activity and show only the response
-              const updatedMessage: Partial<AgentMessage> = hasFinalText ? {
-                content: cumulativeText,
-                toolActivity: undefined, // Hide tool activity once we have the response
-                codeActivity: undefined,  // Hide code activity once we have the response
+              // Update message with ONLY text content and images (no tool activity)
+              const updatedMessage: Partial<AgentMessage> = {
+                content: hasFinalText ? cumulativeText : 'Working on your request...',
                 hasVisualization: cumulativeImages.length > 0,
                 artifactImageUrl: cumulativeImages[0],
                 status: 'sending',
-              } : {
-                // While processing, show tool activity
-                content: 'Working on your request...',
-                toolActivity: cumulativeToolCalls.length > 0 || cumulativeToolResponses.length > 0 
-                  ? { calls: cumulativeToolCalls, responses: cumulativeToolResponses }
-                  : undefined,
-                codeActivity: cumulativeCodeExecutions.length > 0
-                  ? { executions: cumulativeCodeExecutions }
-                  : undefined,
-                status: 'sending',
               }
+              
+              console.log(`⏱️  [STORE] Updating message with text:`, {
+                contentLength: updatedMessage.content?.length,
+                hasText: hasFinalText,
+                hasImages: cumulativeImages.length > 0,
+              })
               
               updateMessage(agentMessageId, updatedMessage)
             },
             // onComplete - called when stream finishes
             () => {
-              console.log('✅ SSE stream completed')
-              // Final update with just the text response
+              console.log('='.repeat(80))
+              console.log('✅ SSE STREAM COMPLETED')
+              console.log('='.repeat(80))
+              // Mark as sent but KEEP the tool activity visible
               updateMessage(agentMessageId, { 
                 status: 'sent',
-                toolActivity: undefined,
-                codeActivity: undefined,
+                // ✅ Keep tool/code activity visible to show what the agent did
               })
               set({ isLoading: false, isProcessing: false })
             },
@@ -325,9 +409,9 @@ export const useAgentStore = create<AgentState>()(
             messages: [...state.messages, {
               id: `error-${uuidv4()}`,
               content: `Error: ${errorMessage}`,
-              sender: 'agent',
+            sender: 'agent',
               timestamp: new Date().toISOString(),
-              isError: true,
+            isError: true,
               status: 'sent',
             }],
             isLoading: false,
@@ -375,6 +459,7 @@ export const useAgentStore = create<AgentState>()(
             timestamp: new Date().toISOString(),
             status: 'sent',
           }],
+          messageEvents: new Map(),  // Clear event timeline too
         })
       },
 
@@ -403,15 +488,19 @@ export const useAgentActions = () => {
   const sendMessage = useAgentStore(state => state.sendMessage)
   const sendMultipartMessage = useAgentStore(state => state.sendMultipartMessage)
   const updateMessage = useAgentStore(state => state.updateMessage)
+  const addMessageEvent = useAgentStore(state => state.addMessageEvent)
+  const getEventsForMessage = useAgentStore(state => state.getEventsForMessage)
   const retryMessage = useAgentStore(state => state.retryMessage)
   const clearMessages = useAgentStore(state => state.clearMessages)
   const setUserId = useAgentStore(state => state.setUserId)
   const clearError = useAgentStore(state => state.clearError)
-
+  
   return {
     sendMessage,
     sendMultipartMessage,
     updateMessage,
+    addMessageEvent,
+    getEventsForMessage,
     retryMessage,
     clearMessages,
     setUserId,
