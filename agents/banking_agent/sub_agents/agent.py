@@ -35,7 +35,7 @@ remote_agent = RemoteA2aAgent(
     description=(
         "Helpful assistant that can fetch user profile information, personal details, and other user-related data."
     ),
-    agent_card=f"https://agent.ai-agent-bakeoff.com/.well-known/agent-card.json",
+    agent_card=f"https://a2a-426194555180.us-west1.run.app/.well-known/agent-card.json",
 )
 
 # Sequential Visualization Sub-Agents

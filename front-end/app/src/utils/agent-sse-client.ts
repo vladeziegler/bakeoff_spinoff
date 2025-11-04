@@ -26,8 +26,8 @@ export class AgentSSEClient {
     // Create abort controller for cancellation
     this.controller = new AbortController()
     
-    // Use custom SSE endpoint that properly streams without buffering
-    const url = getApiUrl('/run_sse_custom')
+    // Use Edge Runtime proxy (no buffering!) instead of Next.js rewrite
+    const url = '/api/run_sse_custom'
     const requestBody = {
       appName,
       userId,

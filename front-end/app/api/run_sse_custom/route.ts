@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Forward to ADK's SSE endpoint
+    // Forward to ADK's SSE endpoint (edge runtime = no buffering!)
     const adkUrl = `http://localhost:8000/run_sse`
 
     const adkPayload = {

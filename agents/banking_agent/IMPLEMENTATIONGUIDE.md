@@ -15,7 +15,6 @@
 - grounding_tool
 - create HTML graph
 
-
 *frontend*
 - Runner with session_id, app_name, user_id
 - Handling text parts (send, deconstruct)
